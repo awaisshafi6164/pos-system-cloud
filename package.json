@@ -9,6 +9,7 @@
     "@mui/icons-material": "^7.3.6",
     "@mui/material": "^7.1.2",
     "@mui/x-date-pickers": "^7.0.0",
+    "@supabase/supabase-js": "^2.95.3",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",

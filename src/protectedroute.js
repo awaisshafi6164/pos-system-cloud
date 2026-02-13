@@ -1,6 +1,6 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
-import employeeManager from "./utils/EmployeeManager";
+import { useAuth } from "./context/AuthContext";
 
 const rolePermissions = {
   "/employees": ["admin"],     // receptionist NOT allowed
@@ -13,14 +13,16 @@ const rolePermissions = {
 };
 
 const ProtectedRoute = ({ path, element }) => {
-  const user = employeeManager.getEmployee();
+  const { employee, loading } = useAuth();
 
-  if (!user) {
+  if (loading) return null;
+
+  if (!employee) {
     return <Navigate to="/" replace />;
   }
 
   const allowedRoles = rolePermissions[path] || [];
-  if (!allowedRoles.includes(user.role)) {
+  if (!allowedRoles.includes(employee.role)) {
     return <div style={{ padding: "2rem", color: "red" }}>❌ Access Denied</div>;
   }
 

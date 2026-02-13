@@ -1,14 +1,16 @@
-// src/Login.js
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import employeeManager from "./utils/EmployeeManager";
-import { checkLicense, loginEmployee } from "./api/posApi";
+import { checkLicense } from "./api/posApi";
+import { loginEmployee } from "./auth";
+import { useAuth } from "./context/AuthContext";
 
 const Login = () => {
-  const [formData, setFormData] = useState({ username: "", password: "" });
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState(null);
 
   const navigate = useNavigate();
+  const { setEmployee } = useAuth();
 
   const handleChange = (e) => {
     setFormData((prev) => ({
@@ -20,41 +22,37 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const { username, password } = formData;
+    setMessage(null);
 
-    if (username.trim() === "" || password.trim() === "") {
-      alert("Please enter both username and password.");
+    const { email, password } = formData;
+
+    if (email.trim() === "" || password.trim() === "") {
+      setMessage({ type: "error", text: "Please enter both email and password." });
       return;
     }
 
     setLoading(true);
 
     try {
-
       // 🔐 License Validation
+      // Note: current implementation calls a localhost endpoint; keep it non-blocking for deployments.
       const licenseCheck = await checkLicense();
-
-      if (!licenseCheck.valid) {
-        alert("❌ License Invalid:\n" + (licenseCheck.error || "Subscription expired or unauthorized machine."));
-        console.error("❌ License Invalid:\n" + (licenseCheck.error || "Subscription expired or unauthorized machine."));
-        // return;
-      } else {
-        console.error("✅ License is valid.\n");
+      if (!licenseCheck?.valid) {
+        console.warn("License invalid/unreachable:", licenseCheck?.error);
       }
 
-      
       // 👤 Employee Login
-      const result = await loginEmployee(username, password);
+      const result = await loginEmployee(email, password);
 
       if (result.success) {
-        employeeManager.setEmployee(result.user);
+        setEmployee(result.user);
         navigate("/pos");
       } else {
-        alert("❌ " + result.error);
+        setMessage({ type: "error", text: result.error || "Login failed." });
       }
     } catch (err) {
       console.error("Login error:", err);
-      alert("Something went wrong. Please try again.");
+      setMessage({ type: "error", text: "Something went wrong. Please try again." });
     } finally {
       setLoading(false);
     }
@@ -69,15 +67,29 @@ const Login = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
+          {message?.text ? (
+            <div
+              style={{
+                marginBottom: "1rem",
+                padding: "0.75rem",
+                borderRadius: "8px",
+                background: message.type === "error" ? "#ffe8e8" : "#e8fff0",
+                color: message.type === "error" ? "#b00020" : "#0f6f3d",
+              }}
+            >
+              {message.text}
+            </div>
+          ) : null}
+
           <div className="form-group">
-            <label htmlFor="username">Username</label>
+            <label htmlFor="email">Email</label>
             <input
-              type="text"
-              name="username"
-              id="username"
-              value={formData.username}
+              type="email"
+              name="email"
+              id="email"
+              value={formData.email}
               onChange={handleChange}
-              placeholder="Enter your username"
+              placeholder="Enter your email"
               required
             />
           </div>
