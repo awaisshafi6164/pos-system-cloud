@@ -36,7 +36,7 @@ const POSRoute = () => {
 
 function App() {
   return (
-    <Router basename="/restaurant-pos/build">
+    <Router>
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/pos" element={<ProtectedRoute path="/pos" element={<POSRoute />} />} />

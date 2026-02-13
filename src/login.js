@@ -37,7 +37,7 @@ const Login = () => {
       if (!licenseCheck.valid) {
         alert("❌ License Invalid:\n" + (licenseCheck.error || "Subscription expired or unauthorized machine."));
         console.error("❌ License Invalid:\n" + (licenseCheck.error || "Subscription expired or unauthorized machine."));
-        return;
+        // return;
       } else {
         console.error("✅ License is valid.\n");
       }
