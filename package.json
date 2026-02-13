@@ -2,7 +2,7 @@
   "name": "restaurant-pos",
   "version": "1.0.1",
   "private": true,
-  "homepage": "/restaurant-pos/build",
+  "homepage": ".",
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
