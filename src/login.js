@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { checkLicense } from "./api/posApi";
 import { loginEmployee } from "./auth";
 import { useAuth } from "./context/AuthContext";
 
@@ -34,13 +33,6 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // 🔐 License Validation
-      // Note: current implementation calls a localhost endpoint; keep it non-blocking for deployments.
-      const licenseCheck = await checkLicense();
-      if (!licenseCheck?.valid) {
-        console.warn("License invalid/unreachable:", licenseCheck?.error);
-      }
-
       // 👤 Employee Login
       const result = await loginEmployee(email, password);
 

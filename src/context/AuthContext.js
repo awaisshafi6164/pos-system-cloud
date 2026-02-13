@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import employeeManager from "../utils/EmployeeManager";
-import { supabase } from "../supabaseClient";
+import { supabase, isSupabaseConfigured } from "../supabaseClient";
 import { getEmployeeByAuthUid } from "../auth";
 
 const AuthContext = createContext(null);
@@ -17,6 +17,13 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let isMounted = true;
+
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
 
     const loadFromSession = async () => {
       try {
@@ -74,4 +81,3 @@ export const useAuth = () => {
   if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
   return ctx;
 };
-
