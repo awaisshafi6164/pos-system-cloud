@@ -4,6 +4,9 @@ import Header from "./components/header";
 import Sidebar from "./components/sidebar";
 import { ToastContainer, toast } from "react-toastify";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "./context/AuthContext";
+import { supabase } from "./supabaseClient";
+import { createEmployee, deleteEmployee, listEmployees, updateEmployee } from "./api/employeesApi";
 import {
   Box,
   Card,
@@ -27,52 +30,56 @@ import {
 import {
   Edit,
   Delete,
-  Search
+  Search,
+  LockReset,
 } from "@mui/icons-material";
-import {
-  getAllEmployees,
-  addEmployee,
-  updateEmployee,
-  deleteEmployee,
-} from "./api/posApi";
 
 function Employees() {
+  const { employee, loading: authLoading } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [form, setForm] = useState({
-    name: "", email: "", role: "", password: ""
+    name: "",
+    email: "",
+    role: "",
   });
+  const [busy, setBusy] = useState(false);
 
   // Fetch all employees
   const loadEmployees = async () => {
-    const data = await getAllEmployees();
-    setEmployees(data);
+    const data = await listEmployees();
+    setEmployees(Array.isArray(data) ? data : []);
   };
 
   // Add employee
-  const handleAdd = async () => {
-    const result = await addEmployee(form);
-    if (result.success) {
-      toast.success("Employee added successfully!");
-      loadEmployees();
-      setForm({ name: "", email: "", role: "", password: "" });
-    } else {
-      toast.error(result.error);
+  const handleAdd = async (e) => {
+    e?.preventDefault?.();
+    setBusy(true);
+    try {
+      const result = await createEmployee(form);
+      toast.success(result.message || "Employee created. Invite email sent.");
+      await loadEmployees();
+      setForm({ name: "", email: "", role: "" });
+    } catch (err) {
+      toast.error(err?.message || "Failed to create employee");
+    } finally {
+      setBusy(false);
     }
   };
 
   useEffect(() => {
-    loadEmployees();
-  }, []);
+    if (authLoading) return;
+    if (!employee?.business_id) return;
+    loadEmployees().catch((err) => toast.error(err?.message || "Failed to load employees"));
+  }, [authLoading, employee?.business_id]);
 
   const handleEdit = (employee) => {
     setForm({
       name: employee.name,
       email: employee.email,
       role: employee.role,
-      password: "" // We don’t autofill password for security
     });
     setEditingId(employee.id);
     setIsEditing(true);
@@ -80,42 +87,64 @@ function Employees() {
 
   const handleUpdate = async (e) => {
     e.preventDefault();
-    const result = await updateEmployee(editingId, form);
-    if (result.success) {
+    setBusy(true);
+    try {
+      await updateEmployee({ id: editingId, name: form.name, role: form.role });
       toast.success("Employee Updated!");
-      loadEmployees();
-      setForm({ name: "", email: "", role: "", password: "" });
+      await loadEmployees();
+      setForm({ name: "", email: "", role: "" });
       setIsEditing(false);
       setEditingId(null);
-    } else {
-      toast.error(result.error);
+    } catch (err) {
+      toast.error(err?.message || "Failed to update employee");
+    } finally {
+      setBusy(false);
     }
   };
 
 
   const handleDelete = async (employeeId) => {
     if (window.confirm("Are you sure you want to delete this employee?")) {
-      const result = await deleteEmployee(employeeId);
-      if (result.success) {
-        toast.success("Employee deleted successfully!");
+      setBusy(true);
+      try {
+        const result = await deleteEmployee(employeeId);
+        toast.success(result.message || "Employee deleted successfully!");
         setEmployees((prev) => prev.filter((e) => e.id !== employeeId));
-      } else {
-        toast.error(result.error || "Failed to delete employee");
+      } catch (err) {
+        toast.error(err?.message || "Failed to delete employee");
+      } finally {
+        setBusy(false);
       }
     }
   };
 
   const handleCancel = () => {
-    setForm({ name: "", email: "", role: "", password: "" });
+    setForm({ name: "", email: "", role: "" });
     setIsEditing(false);
     setEditingId(null);
   };
 
-  const filteredEmployees = employees.filter(emp =>
-    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.role.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleSendResetPassword = async (email) => {
+    setBusy(true);
+    try {
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw new Error(error.message);
+      toast.success("Password reset email sent.");
+    } catch (err) {
+      toast.error(err?.message || "Failed to send reset email");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const filteredEmployees = employees.filter((emp) => {
+    const name = String(emp?.name || "").toLowerCase();
+    const email = String(emp?.email || "").toLowerCase();
+    const role = String(emp?.role || "").toLowerCase();
+    const term = String(searchTerm || "").toLowerCase();
+    return name.includes(term) || email.includes(term) || role.includes(term);
+  });
 
   const getRoleColor = (role) => {
     switch(role) {
@@ -151,38 +180,29 @@ function Employees() {
                         {isEditing ? 'Edit Employee' : 'Add Employee'}
                       </Typography>
                       
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <TextField
-                          fullWidth
-                          label="Name"
-                          value={form.name}
-                          onChange={e => setForm({ ...form, name: e.target.value })}
-                          required
-                        />
-                        
-                        <TextField
-                          fullWidth
-                          label="Email"
-                          type="email"
-                          value={form.email}
-                          onChange={e => setForm({ ...form, email: e.target.value })}
-                          autoComplete="off"
-                          required
-                        />
-                        
-                        <TextField
-                          fullWidth
-                          label="Password"
-                          type="password"
-                          value={form.password}
-                          onChange={e => setForm({ ...form, password: e.target.value })}
-                          autoComplete="new-password"
-                          required
-                        />
-                        
-                        <TextField
-                          fullWidth
-                          select
+	                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+	                        <TextField
+	                          fullWidth
+	                          label="Name"
+	                          value={form.name}
+	                          onChange={e => setForm({ ...form, name: e.target.value })}
+	                          required
+	                        />
+	                        
+	                        <TextField
+	                          fullWidth
+	                          label="Email"
+	                          type="email"
+	                          value={form.email}
+	                          onChange={e => setForm({ ...form, email: e.target.value })}
+	                          autoComplete="off"
+	                          required
+	                          disabled={isEditing}
+	                        />
+	                        
+	                        <TextField
+	                          fullWidth
+	                          select
                           label="Employee Role"
                           value={form.role}
                           onChange={e => setForm({ ...form, role: e.target.value })}
@@ -194,32 +214,39 @@ function Employees() {
                           <MenuItem value="receptionist">Receptionist</MenuItem>
                         </TextField>
                         
-                        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                          <Button
-                            fullWidth
-                            variant="contained"
-                            onClick={isEditing ? handleUpdate : handleAdd}
-                            sx={{ py: 1.5 }}
-                          >
-                            {isEditing ? 'UPDATE' : 'SAVE'}
-                          </Button>
-                          {isEditing && (
+	                        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+	                          <Button
+	                            fullWidth
+	                            variant="contained"
+	                            onClick={isEditing ? handleUpdate : handleAdd}
+	                            sx={{ py: 1.5 }}
+	                            disabled={busy}
+	                          >
+	                            {isEditing ? 'UPDATE' : 'SAVE'}
+	                          </Button>
+	                          {isEditing && (
                             <Button
                               fullWidth
                               variant="outlined"
-                              color="error"
-                              onClick={handleCancel}
-                              sx={{ py: 1.5 }}
-                            >
-                              CANCEL
-                            </Button>
-                          )}
-                        </Box>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              </Grid>
+	                              color="error"
+	                              onClick={handleCancel}
+	                              sx={{ py: 1.5 }}
+	                              disabled={busy}
+	                            >
+	                              CANCEL
+	                            </Button>
+	                          )}
+	                        </Box>
+	                        {!isEditing ? (
+	                          <Typography variant="caption" color="text.secondary">
+	                            Creating an employee sends an invite email to set a password.
+	                          </Typography>
+	                        ) : null}
+	                      </Box>
+	                    </CardContent>
+	                  </Card>
+	                </motion.div>
+	              </Grid>
 
               {/* Right Side - Employees List */}
               <Grid item xs={12} lg={9}>
@@ -260,7 +287,7 @@ function Employees() {
                         <Table>
                           <TableHead>
                             <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                              <TableCell sx={{ fontWeight: 'bold' }}>ID</TableCell>
+                              {/* <TableCell sx={{ fontWeight: 'bold' }}>ID</TableCell> */}
                               <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
                               <TableCell sx={{ fontWeight: 'bold' }}>Role</TableCell>
                               <TableCell sx={{ fontWeight: 'bold' }} align="center">Action</TableCell>
@@ -278,7 +305,7 @@ function Employees() {
                                   transition={{ delay: index * 0.05 }}
                                   sx={{ '&:hover': { bgcolor: 'action.hover' } }}
                                 >
-                                  <TableCell>#{emp.id}</TableCell>
+                                  {/* <TableCell>#{emp.id}</TableCell> */}
                                   <TableCell>
                                     <Box>
                                       <Typography variant="body1" sx={{ fontWeight: 600 }}>
@@ -296,27 +323,39 @@ function Employees() {
                                       size="small"
                                     />
                                   </TableCell>
-                                  <TableCell align="center">
-                                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                                      <Tooltip title="Edit">
-                                        <IconButton
-                                          size="small"
-                                          onClick={() => handleEdit(emp)}
-                                          sx={{ color: '#666' }}
-                                        >
-                                          <Edit fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
-                                      <Tooltip title="Delete">
-                                        <IconButton
-                                          size="small"
-                                          onClick={() => handleDelete(emp.id)}
-                                          sx={{ color: '#666' }}
-                                        >
-                                          <Delete fontSize="small" />
-                                        </IconButton>
-                                      </Tooltip>
-                                    </Box>
+	                                  <TableCell align="center">
+	                                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+	                                      <Tooltip title="Send password reset">
+	                                        <IconButton
+	                                          size="small"
+	                                          onClick={() => handleSendResetPassword(emp.email)}
+	                                          sx={{ color: '#666' }}
+	                                          disabled={busy}
+	                                        >
+	                                          <LockReset fontSize="small" />
+	                                        </IconButton>
+	                                      </Tooltip>
+	                                      <Tooltip title="Edit">
+	                                        <IconButton
+	                                          size="small"
+	                                          onClick={() => handleEdit(emp)}
+	                                          sx={{ color: '#666' }}
+	                                          disabled={busy}
+	                                        >
+	                                          <Edit fontSize="small" />
+	                                        </IconButton>
+	                                      </Tooltip>
+	                                      <Tooltip title="Delete">
+	                                        <IconButton
+	                                          size="small"
+	                                          onClick={() => handleDelete(emp.id)}
+	                                          sx={{ color: '#666' }}
+	                                          disabled={busy}
+	                                        >
+	                                          <Delete fontSize="small" />
+	                                        </IconButton>
+	                                      </Tooltip>
+	                                    </Box>
                                   </TableCell>
                                 </TableRow>
                               ))}

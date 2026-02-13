@@ -10,6 +10,7 @@ import Menu from "./menu";
 import Settings from "./settings";
 import Receipt from "./components/Receipt";
 import Login from "./login";
+import ResetPassword from "./resetPassword";
 import ProtectedRoute from "./protectedroute";
 import { AuthProvider } from "./context/AuthContext";
 import settingsManager from "./utils/SettingsManager";
@@ -41,6 +42,7 @@ function App() {
       <Router>
         <Routes>
           <Route path="/" element={<Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/pos" element={<ProtectedRoute path="/pos" element={<POSRoute />} />} />
           <Route path="/invoice" element={<ProtectedRoute path="/invoice" element={<Invoice />} />} />
           <Route path="/employees" element={<ProtectedRoute path="/employees" element={<Employees />} />} />
