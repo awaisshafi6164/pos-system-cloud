@@ -1,0 +1,28 @@
+.btn-sm{
+    margin-left: 6px;
+    margin-right: 6px;
+}
+
+/* Add New Employee Form Section */
+.employee-form-row {
+    margin-bottom: 20px;
+    gap: 1rem;
+    align-items: flex-end;
+    display: flex;
+    flex-wrap: wrap;
+}
+
+/* Add Button inside form row */
+.employee-form-row .form-group-button {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.8rem;
+}
+
+/* Optional styling for h2 or headers inside cards (used in modal or add employee) */
+.card h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #333;
+}

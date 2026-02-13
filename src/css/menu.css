@@ -1,0 +1,21 @@
+.table-actions {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.menu-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 20px;
+    align-items: flex-end;
+}
+
+.menu-form-row .form-group-button {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.8rem;
+}

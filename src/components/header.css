@@ -1,0 +1,45 @@
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 20px;
+    background-color: #2d2d2d;
+    color: white;
+    flex-wrap: wrap;
+}
+
+.restaurant-logo {
+    display: flex;
+    align-items: center;
+    margin-right: 15px;
+}
+
+.restaurant-logo img {
+    height: 50px;
+    max-width: 150px;
+    object-fit: contain;
+}
+
+.restaurant-info {
+    text-align: left;
+    flex: 1;
+}
+
+.developer-info {
+    text-align: center;
+    color: whitesmoke;
+    flex: 1;
+}
+
+.user-info {
+    text-align: right;
+}
+
+#logout-btn {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+}

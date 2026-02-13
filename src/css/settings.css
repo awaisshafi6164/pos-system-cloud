@@ -1,0 +1,549 @@
+/* Settings Page Styles */
+.settings-content {
+  background-color: #F5F7FB;
+  min-height: 100vh;
+  padding: 40px 64px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+/* Page Header */
+.settings-content .settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 32px;
+}
+
+.settings-content .header-left h1 {
+  font-size: 32px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 8px 0;
+}
+
+.settings-content .header-left p {
+  font-size: 15px;
+  color: #6B7280;
+  margin: 0;
+}
+
+.settings-content .header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Buttons - Scoped to settings */
+.settings-content .btn-primary {
+  background-color: #2563EB;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  height: 40px;
+  transition: background-color 0.2s;
+}
+
+.settings-content .btn-primary:hover {
+  background-color: #1D4ED8;
+}
+
+.settings-content .btn-ghost {
+  background-color: transparent;
+  color: #374151;
+  border: 1px solid #D1D5DB;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  height: 40px;
+  transition: all 0.2s;
+}
+
+.settings-content .btn-ghost:hover {
+  background-color: #F9FAFB;
+  border-color: #9CA3AF;
+}
+
+.settings-content .btn-secondary {
+  background-color: #F3F4F6;
+  color: #374151;
+  border: 1px solid #D1D5DB;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.settings-content .btn-secondary:hover {
+  background-color: #E5E7EB;
+}
+
+.settings-content .btn-text {
+  background: none;
+  border: none;
+  color: #2563EB;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.settings-content .btn-text:hover {
+  background-color: #EFF6FF;
+}
+
+/* Cards */
+.settings-content .settings-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.settings-content .card-header {
+  padding: 24px 28px 0 28px;
+  border-bottom: none;
+}
+
+.settings-content .card-header h2 {
+  font-size: 20px;
+  font-weight: 500;
+  color: #111827;
+  margin: 0 0 8px 0;
+}
+
+.settings-content .card-header p {
+  font-size: 14px;
+  color: #6B7280;
+  margin: 0 0 20px 0;
+}
+
+.settings-content .card-content {
+  padding: 0 28px 28px 28px;
+}
+
+/* Form Layout */
+.settings-content .form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.settings-content .form-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-content .form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-content .form-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 6px;
+}
+
+.settings-content .form-group input,
+.settings-content .form-group textarea,
+.settings-content .form-group select {
+  padding: 10px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  background-color: #FFFFFF;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.settings-content .form-group input:focus,
+.settings-content .form-group textarea:focus,
+.settings-content .form-group select:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.settings-content .form-group input:disabled {
+  background-color: #F9FAFB;
+  color: #9CA3AF;
+  cursor: not-allowed;
+}
+
+.settings-content .form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.settings-content .helper-text {
+  font-size: 12px;
+  color: #6B7280;
+  margin-top: 4px;
+}
+
+/* Logo Upload */
+.settings-content .logo-upload {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.settings-content .logo-preview {
+  width: 96px;
+  height: 96px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  background-color: #F9FAFB;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9CA3AF;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+.settings-content .logo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings-content .upload-controls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Legacy styles for old sections */
+.settings-content .settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-content .settings-section .card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  padding: 24px 28px;
+}
+
+.settings-content .settings-section .card h2 {
+  font-size: 20px;
+  font-weight: 500;
+  color: #111827;
+  margin: 0 0 20px 0;
+}
+
+.settings-content .horizontal-group {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.settings-content .horizontal-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+  min-width: 120px;
+}
+
+.settings-content .horizontal-group input,
+.settings-content .horizontal-group select {
+  padding: 10px 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #111827;
+  background-color: #FFFFFF;
+  flex: 1;
+}
+
+.settings-content .horizontal-group input:focus,
+.settings-content .horizontal-group select:focus {
+  outline: none;
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.settings-content .Visibility-group {
+  border-top: 1px solid #E5E7EB;
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+.settings-content .Visibility-group > label {
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.settings-content .Visibility-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  min-width: auto;
+}
+
+.settings-content .Visibility-group input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+/* Radio Button Groups */
+.settings-content .radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.settings-content .radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  margin: 0;
+}
+
+.settings-content .radio-option input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563EB;
+}
+
+.settings-content .radio-option span {
+  font-weight: 400;
+}
+
+/* Input with Prefix/Suffix */
+.settings-content .input-with-suffix,
+.settings-content .input-with-prefix {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.settings-content .input-with-suffix input,
+.settings-content .input-with-prefix input {
+  flex: 1;
+  padding-right: 40px;
+}
+
+.settings-content .input-with-prefix input {
+  padding-left: 40px;
+  padding-right: 12px;
+}
+
+.settings-content .suffix,
+.settings-content .prefix {
+  position: absolute;
+  font-size: 14px;
+  color: #6B7280;
+  pointer-events: none;
+}
+
+.settings-content .suffix {
+  right: 12px;
+}
+
+.settings-content .prefix {
+  left: 12px;
+}
+
+/* Toggle Switch */
+.settings-content .toggle-section {
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.settings-content .toggle-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.settings-content .toggle-header h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: #111827;
+  margin: 0 0 4px 0;
+}
+
+.settings-content .toggle-header p {
+  font-size: 14px;
+  color: #6B7280;
+  margin: 0;
+}
+
+.settings-content .toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.settings-content .toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.settings-content .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #D1D5DB;
+  transition: 0.3s;
+  border-radius: 24px;
+}
+
+.settings-content .slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.settings-content .toggle-switch input:checked + .slider {
+  background-color: #2563EB;
+}
+
+.settings-content .toggle-switch input:checked + .slider:before {
+  transform: translateX(24px);
+}
+
+/* Status Display */
+.settings-content .status-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  background-color: #F9FAFB;
+}
+
+.settings-content .status-text {
+  font-size: 14px;
+  color: #6B7280;
+  flex: 1;
+}
+
+.settings-content .status-badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+.settings-content .status-badge.pending {
+  background-color: #FEF3C7;
+  color: #92400E;
+}
+
+.settings-content .status-badge.success {
+  background-color: #D1FAE5;
+  color: #065F46;
+}
+
+.settings-content .status-badge.error {
+  background-color: #FEE2E2;
+  color: #991B1B;
+}
+
+/* Checkbox Grid */
+.settings-content .checkbox-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.settings-content .checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+  cursor: pointer;
+  margin: 0;
+}
+
+.settings-content .checkbox-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563EB;
+}
+
+.settings-content .checkbox-option span {
+  font-weight: 400;
+}
+
+@media (max-width: 768px) {
+  .settings-content .checkbox-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .settings-content {
+    padding: 20px;
+  }
+  
+  .settings-content .settings-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .settings-content .form-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .settings-content .horizontal-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .settings-content .horizontal-group label {
+    min-width: auto;
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "React App (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:3000/restaurant-pos/build",
+      "webRoot": "${workspaceFolder}/src",
+      "preLaunchTask": "npm start",
+      "sourceMapPathOverrides": {
+        "webpack:///src/*": "${webRoot}/*"
+      }
+    }
+  ]
+}
