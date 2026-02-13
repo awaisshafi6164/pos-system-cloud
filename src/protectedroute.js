@@ -9,7 +9,6 @@ const rolePermissions = {
   "/pos": ["admin", "manager", "receptionist"],
   "/menu-items": ["admin", "manager"],    // receptionist NOT allowed
   "/receipt": ["admin", "manager", "receptionist"],
-  "/vendors": ["admin", "manager"]
 };
 
 const ProtectedRoute = ({ path, element }) => {

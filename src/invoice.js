@@ -5,7 +5,8 @@ import "./css/invoice.css";
 import Header from "./components/header";
 import Sidebar from "./components/sidebar";
 import SalesReportSection from "./components/SalesReportSection";
-import { getAllCustomers, deleteInvoice } from "./api/posApi";
+import { useAuth } from "./context/AuthContext";
+import { deleteInvoiceById, listInvoicesLegacy } from "./api/invoicesApi";
 import {
   Table,
   TableBody,
@@ -60,6 +61,7 @@ const INVOICE_ITEM_COLUMNS_TO_DISPLAY = [
 ];
 
 function Invoice() {
+  const { employee, loading: authLoading } = useAuth();
   const [invoices, setInvoices] = useState([]);
   const [selectedInvoiceItems, setSelectedInvoiceItems] = useState([]);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
@@ -86,7 +88,11 @@ function Invoice() {
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
-        const data = await getAllCustomers();
+        if (authLoading) return;
+        if (!employee?.business_id) return;
+        const data = await listInvoicesLegacy({
+          businessId: employee.business_id,
+        });
 
         if (!Array.isArray(data) || data.length === 0) {
           setFetchError("❌ No invoices found in the database.");
@@ -114,7 +120,7 @@ function Invoice() {
       }
     };
     loadSettings();
-  }, []);
+  }, [authLoading, employee?.business_id]);
 
   // Auto-filter when dates change
   useEffect(() => {
@@ -237,7 +243,10 @@ function Invoice() {
     }
 
     try {
-      const result = await deleteInvoice(selectedInvoiceId);
+      const result = await deleteInvoiceById({
+        businessId: employee?.business_id,
+        invoiceId: selectedInvoiceId,
+      });
       if (result.success) {
         toast.success("Invoice deleted successfully!");
         setInvoices(invoices.filter(inv => inv.id !== selectedInvoiceId));

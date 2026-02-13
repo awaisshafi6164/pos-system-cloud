@@ -18,6 +18,7 @@ import { useAuth } from "./context/AuthContext";
 import { getCategoriesFromMenuItems, listMenuItems } from "./api/menuItemsApi";
 import { lookupInvoiceLegacy, saveInvoiceLegacy, getTotalSalesLegacy } from "./api/invoicesApi";
 import { applyMenuStockUpdates } from "./api/stockApi";
+import { getNextUsin } from "./api/invoiceNumberApi";
 
 const POS = () => {
   const { employee, loading: authLoading } = useAuth();
@@ -79,13 +80,29 @@ const POS = () => {
     }
   }, [employee?.business_id]);
 
-  const fetchNextUSIN = async () => {
+  const fetchNextUSIN = useCallback(async () => {
     const invoiceInput = document.getElementById("invoice-number");
-    if (invoiceInput) {
+    if (!invoiceInput) return;
+    if (isCreditInvoice) {
       invoiceInput.value = "";
       invoiceInput.placeholder = "Enter your invoice number (e.g., LR-01, 001)";
+      return;
     }
-  };
+
+    try {
+      // eslint-disable-next-line no-console
+      console.debug("[pos] business_id:", employee?.business_id);
+      const next = await getNextUsin();
+      // eslint-disable-next-line no-console
+      console.debug("[pos] next usin:", next);
+      invoiceInput.value = next || "";
+      invoiceInput.placeholder = "001";
+    } catch (err) {
+      console.error("❌ Error fetching next invoice number:", err);
+      invoiceInput.value = "";
+      invoiceInput.placeholder = "001";
+    }
+  }, [isCreditInvoice, employee?.business_id]);
 
   const handleLookupInvoice = async () => {
     const invoiceNo = document.getElementById("invoice-number").value.trim();
@@ -317,7 +334,7 @@ const POS = () => {
 
     loadSettings();
 
-  }, [authLoading, employee?.business_id, fetchMenu]);
+  }, [authLoading, employee?.business_id, fetchMenu, fetchNextUSIN]);
 
   useEffect(() => {
     const count = selectedMenuItems.reduce((sum, item) => sum + item.quantity, 0);

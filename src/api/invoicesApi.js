@@ -42,13 +42,13 @@ const mapLegacyInvoiceRow = (row, itemRows) => ({
   emergency_contact: row.emergency_contact || null,
   nationality: row.nationality || null,
   Items: (itemRows || []).map((it) => ({
-    ItemCode: it.item_code,
-    ItemName: it.item_name,
-    Quantity: it.quantity,
-    SaleValue: Number(it.sale_value || 0),
-    TaxRate: Number(it.tax_rate || 0),
-    TaxCharged: Number(it.tax_charged || 0),
-    TotalAmount: Number(it.total_amount || 0),
+    ItemCode: it.ItemCode ?? it.item_code,
+    ItemName: it.ItemName ?? it.item_name,
+    Quantity: it.Quantity ?? it.quantity,
+    SaleValue: Number((it.SaleValue ?? it.sale_value) || 0),
+    TaxRate: Number((it.TaxRate ?? it.tax_rate) || 0),
+    TaxCharged: Number((it.TaxCharged ?? it.tax_charged) || 0),
+    TotalAmount: Number((it.TotalAmount ?? it.total_amount) || 0),
   })),
 });
 
@@ -203,3 +203,47 @@ export const getTotalSalesLegacy = async ({ businessId, fromDate, toDate }) => {
   return { success: true, total: total };
 };
 
+export const listInvoicesLegacy = async ({ businessId, fromDate, toDate }) => {
+  if (!businessId) throw new Error("Missing businessId");
+
+  let query = supabase
+    .from("invoices")
+    .select(
+      "id, business_id, usin, pra_invoice_number, ref_usin, datetime, buyer_name, buyer_pntn, buyer_cnic, buyer_phone, address, total_sale_value, total_tax_charged, discount, further_tax, total_bill_amount, total_quantity, payment_mode, invoice_type, pos_charges, service_charges, balance, paid, check_in_date, check_out_date, time_in, time_out, emergency_contact, nationality, invoice_items(item_code, item_name, quantity, sale_value, tax_rate, tax_charged, total_amount)"
+    )
+    .eq("business_id", businessId)
+    .order("datetime", { ascending: false });
+
+  if (fromDate) query = query.gte("datetime", startOfDayIso(fromDate));
+  if (toDate) query = query.lte("datetime", endOfDayIso(toDate));
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  return (data || []).map((row) => {
+    const items = (row.invoice_items || []).map((it) => ({
+      ItemCode: it.item_code,
+      ItemName: it.item_name,
+      Quantity: it.quantity,
+      SaleValue: it.sale_value,
+      TaxRate: it.tax_rate,
+      TaxCharged: it.tax_charged,
+      TotalAmount: it.total_amount,
+    }));
+    return mapLegacyInvoiceRow(row, items);
+  });
+};
+
+export const deleteInvoiceById = async ({ businessId, invoiceId }) => {
+  if (!businessId) throw new Error("Missing businessId");
+  if (!invoiceId) throw new Error("Missing invoiceId");
+
+  const { error } = await supabase
+    .from("invoices")
+    .delete()
+    .eq("id", invoiceId)
+    .eq("business_id", businessId);
+
+  if (error) throw new Error(error.message);
+  return { success: true };
+};
