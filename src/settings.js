@@ -5,9 +5,11 @@ import Sidebar from "./components/sidebar";
 import "./css/settings.css";
 import settingsManager from "./utils/SettingsManager"; // ✅ import SettingsManager
 import { ToastContainer, toast } from "react-toastify";
-import { getSettings, updateSettings, updateLogo } from "./api/posApi";
+import { useAuth } from "./context/AuthContext";
+import { upsertBusinessSettings } from "./api/settingsApi";
 
 const Settings = () => {
+  const { employee, loading: authLoading } = useAuth();
   const [form, setForm] = useState({
     restaurant_name: "",
     restaurant_address: "",
@@ -42,58 +44,41 @@ const Settings = () => {
     pra_api_type: "sandbox",
     pos_layout: "0",
   });
-  const [logoFile, setLogoFile] = useState(null);
 
   // ✅ Fetch settings on component mount
   useEffect(() => {
     const loadSettings = async () => {
-      const settings = await getSettings();
+      if (!employee?.business_id) return;
+      const settings = await settingsManager.fetchSettings(employee.business_id);
       if (settings) {
-        // If logo_path exists, prepend the full URL
-        if (settings.logo_path) {
-          settings.logo_path = `http://localhost/restaurant-pos/api/${settings.logo_path}`;
-        }
         // Set service_charge_type based on service_charges_type
         if (settings.service_charges_type) {
           settings.service_charge_type = settings.service_charges_type === "1" ? "percent" : "rs";
         }
-        setForm(settings);
+        setForm((prev) => ({ ...prev, ...settings }));
         settingsManager.setSettings(settings); // ✅ update cache
       }
     };
 
+    if (authLoading) return;
     loadSettings();
-  }, []);
+  }, [authLoading, employee?.business_id]);
 
   // ✅ Save settings
   const handleSave = async () => {
     let updatedForm = { ...form };
     
-    // Upload logo first if present
-    if (logoFile) {
-      const logoResult = await updateLogo(logoFile);
-      if (logoResult.success) {
-        updatedForm.logo_path = `http://localhost/restaurant-pos/api/${logoResult.logo_path}`;
-        setForm(updatedForm);
-      } else {
-        toast.error("Logo upload failed: " + logoResult.error);
-        return;
-      }
+    if (!employee?.business_id) {
+      toast.error("Missing business id. Please log in again.");
+      return;
     }
-    
-    // Update settings (remove URL prefix before saving to DB)
-    const settingsToSave = { ...updatedForm };
-    if (settingsToSave.logo_path) {
-      settingsToSave.logo_path = settingsToSave.logo_path.replace('http://localhost/restaurant-pos/api/', '');
-    }
-    
-    const result = await updateSettings(settingsToSave);
-    if (result.success) {
+
+    try {
+      await upsertBusinessSettings(employee.business_id, updatedForm);
       toast.success("Settings updated successfully!");
       settingsManager.setSettings(updatedForm);
-      setLogoFile(null);
-    } else {
-      toast.error("Error: " + result.error);
+    } catch (err) {
+      toast.error("Error: " + (err?.message || "Failed to save settings"));
     }
   };
 
@@ -101,7 +86,6 @@ const Settings = () => {
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      setLogoFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setForm({ ...form, logo_path: reader.result });

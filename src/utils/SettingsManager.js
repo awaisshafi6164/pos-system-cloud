@@ -1,5 +1,7 @@
 // src/utils/SettingsManager.js
 // import { getSettings } from "../api/posApi";
+import employeeManager from "./EmployeeManager";
+import { getBusinessSettings } from "../api/settingsApi";
 
 class SettingsManager {
     static instance = null;
@@ -7,27 +9,23 @@ class SettingsManager {
     constructor() {
       if (!SettingsManager.instance) {
         this.settings = null;
+        this.businessId = null;
         SettingsManager.instance = this;
       }
       return SettingsManager.instance;
     }
   
-    async fetchSettings() {
-      if (this.settings) return this.settings;
-  
+    async fetchSettings(businessId) {
+      const resolvedBusinessId = businessId || employeeManager.getField("business_id");
+      if (!resolvedBusinessId) return null;
+
+      if (this.settings && this.businessId === resolvedBusinessId) return this.settings;
+
       try {
-        const res = await fetch("http://localhost/restaurant-pos/api/settings/get_settings.php");
-        const data = await res.json();
-        if (data.success) {
-          // Prepend full URL to logo_path if it exists
-          if (data.settings.logo_path) {
-            data.settings.logo_path = `http://localhost/restaurant-pos/api/${data.settings.logo_path}`;
-          }
-          this.settings = data.settings;
-          return this.settings;
-        } else {
-          throw new Error(data.error || "Failed to fetch settings.");
-        }
+        const settings = await getBusinessSettings(resolvedBusinessId);
+        this.settings = settings || {};
+        this.businessId = resolvedBusinessId;
+        return this.settings;
       } catch (err) {
         console.error("Settings fetch error:", err);
         return null;
