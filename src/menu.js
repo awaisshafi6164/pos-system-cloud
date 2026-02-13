@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 // import "./css/common.css";
 import Header from "./components/header";
 import Sidebar from "./components/sidebar";
@@ -33,9 +33,17 @@ import {
   FilterList
 } from "@mui/icons-material";
 import settingsManager from "./utils/SettingsManager";
-import { getMenuItems, getCategories, addMenuItem, updateMenuItem, deleteMenuItem } from "./api/posApi";
+import { useAuth } from "./context/AuthContext";
+import {
+  createMenuItem,
+  deleteMenuItem,
+  getCategoriesFromMenuItems,
+  listMenuItems,
+  updateMenuItem,
+} from "./api/menuItemsApi";
 
 function Menu() {
+  const { employee, loading: authLoading } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [categories, setCategories] = useState([]);
@@ -47,37 +55,29 @@ function Menu() {
   const [form, setForm] = useState({
     itemCode: "", itemName: "", itemCategory: "", itemPrice: "", stockQty: ""
   });
+  const [busy, setBusy] = useState(false);
   
   // Fetch all menu
-  const loadmenu = async () => {
-    const data = await getMenuItems();
+  const loadmenu = useCallback(async () => {
+    if (!employee?.business_id) return;
+    const data = await listMenuItems(employee.business_id);
     setmenu(data);
-
-  };
-
-  const loadCategories = async () => {
-    try {
-      const data = await getCategories();
-      setCategories(data);
-    } catch (err) {
-      console.error("Failed to load categories", err);
-    }
-  };
+    setCategories(getCategoriesFromMenuItems(data));
+  }, [employee?.business_id]);
 
   // Add menu
-  const handleAdd = async () => {
-    const payload = {
-      ...form,
-      date_modified: new Date().toISOString().slice(0, 19).replace('T', ' '),
-    };
-    const result = await addMenuItem(payload);
-    if (result.success) {
-      // alert("menu added!");
+  const handleAdd = async (e) => {
+    e?.preventDefault?.();
+    setBusy(true);
+    try {
+      await createMenuItem(form, employee.business_id);
       toast.success("Menu Added!");
-      loadmenu();
+      await loadmenu();
       setForm({ itemCode: "", itemName: "", itemCategory: "", itemPrice: "", stockQty: "" });
-    } else {
-      toast.error(result.error);
+    } catch (err) {
+      toast.error(err?.message || "Failed to add menu item");
+    } finally {
+      setBusy(false);
     }
   };
   
@@ -95,9 +95,10 @@ function Menu() {
     };
 
     loadSettings();
-    loadCategories();
-    loadmenu();
-  }, []);
+    if (authLoading) return;
+    if (!employee?.business_id) return;
+    loadmenu().catch((err) => toast.error(err?.message || "Failed to load menu"));
+  }, [authLoading, employee?.business_id, loadmenu]);
   
   const handleEdit = (menu) => {
     setForm({
@@ -113,32 +114,32 @@ function Menu() {
   
   const handleUpdate = async (e) => {
     e.preventDefault();
-    const payload = {
-      ...form,
-      date_modified: new Date().toISOString().slice(0, 19).replace('T', ' '),
-    };
-    const result = await updateMenuItem(editingId, payload);
-    if (result.success) {
-      // alert("menu updated!");
-      // Example trigger
+    setBusy(true);
+    try {
+      await updateMenuItem(editingId, form, employee.business_id);
       toast.success("Menu Updated!");
-      loadmenu();
+      await loadmenu();
       setForm({ itemCode: "", itemName: "", itemCategory: "", itemPrice: "", stockQty: "" });
       setIsEditing(false);
       setEditingId(null);
-    } else {
-      toast.error(result.error);
+    } catch (err) {
+      toast.error(err?.message || "Failed to update menu item");
+    } finally {
+      setBusy(false);
     }
   };
     
   const handleDelete = async (menuId) => {
     if (window.confirm("Are you sure you want to delete this menu?")) {
-      const result = await deleteMenuItem(menuId);
-      if (result.success) {
+      setBusy(true);
+      try {
+        await deleteMenuItem(menuId, employee.business_id);
         toast.success("Menu item deleted successfully!");
         setmenu((prev) => prev.filter((e) => e.id !== menuId));
-      } else {
-        toast.error(result.error || "Failed to delete menu item");
+      } catch (err) {
+        toast.error(err?.message || "Failed to delete menu item");
+      } finally {
+        setBusy(false);
       }
     }
   };
@@ -149,13 +150,14 @@ function Menu() {
     setEditingId(null);
   };
 
-  const filteredMenu = menu.filter((mu) => {
-    const matchesCategory = categoryFilter === "" || mu.itemCategory === categoryFilter;
-    const matchesSearch = mu.itemName.toLowerCase().includes(searchText) ||
-      mu.itemCategory.toLowerCase().includes(searchText) ||
-      mu.itemCode.toLowerCase().includes(searchText);
-    return matchesCategory && matchesSearch;
-  });
+	  const filteredMenu = menu.filter((mu) => {
+	    const matchesCategory = categoryFilter === "" || mu.itemCategory === categoryFilter;
+	    const itemName = String(mu?.itemName || "").toLowerCase();
+	    const itemCategory = String(mu?.itemCategory || "").toLowerCase();
+	    const itemCode = String(mu?.itemCode || "").toLowerCase();
+	    const matchesSearch = itemName.includes(searchText) || itemCategory.includes(searchText) || itemCode.includes(searchText);
+	    return matchesCategory && matchesSearch;
+	  });
 
   const getCategoryColor = (category) => {
     const colors = ['primary', 'secondary', 'success', 'error', 'warning', 'info'];
@@ -239,25 +241,27 @@ function Menu() {
                         />
                         
                         <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                          <Button
-                            fullWidth
-                            variant="contained"
-                            onClick={isEditing ? handleUpdate : handleAdd}
-                            sx={{ py: 1.5 }}
-                          >
-                            {isEditing ? 'UPDATE' : 'SAVE'}
-                          </Button>
-                          {isEditing && (
+	                          <Button
+	                            fullWidth
+	                            variant="contained"
+	                            onClick={isEditing ? handleUpdate : handleAdd}
+	                            sx={{ py: 1.5 }}
+	                            disabled={busy}
+	                          >
+	                            {isEditing ? 'UPDATE' : 'SAVE'}
+	                          </Button>
+	                          {isEditing && (
                             <Button
                               fullWidth
                               variant="outlined"
-                              color="error"
-                              onClick={handleCancel}
-                              sx={{ py: 1.5 }}
-                            >
-                              CANCEL
-                            </Button>
-                          )}
+	                              color="error"
+	                              onClick={handleCancel}
+	                              sx={{ py: 1.5 }}
+	                              disabled={busy}
+	                            >
+	                              CANCEL
+	                            </Button>
+	                          )}
                         </Box>
                       </Box>
                     </CardContent>
