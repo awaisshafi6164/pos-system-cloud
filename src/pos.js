@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import "./css/pos.css";
 // import "./css/common.css";
 import Header from "./components/header";
@@ -14,9 +14,13 @@ import dayjs from 'dayjs';
 import { useNavigate } from "react-router-dom";
 import settingsManager from "./utils/SettingsManager";
 import { ToastContainer, toast } from "react-toastify";
-import { getMenuItems, getCategories, getNextUSIN, saveInvoiceToPOS, getTotalSales, updateStockQuantities } from "./api/posApi";
+import { useAuth } from "./context/AuthContext";
+import { getCategoriesFromMenuItems, listMenuItems } from "./api/menuItemsApi";
+import { lookupInvoiceLegacy, saveInvoiceLegacy, getTotalSalesLegacy } from "./api/invoicesApi";
+import { applyMenuStockUpdates } from "./api/stockApi";
 
 const POS = () => {
+  const { employee, loading: authLoading } = useAuth();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -64,34 +68,22 @@ const POS = () => {
   });
 
 
-  const fetchMenu = async () => {
+  const fetchMenu = useCallback(async () => {
     try {
-      const data = await getMenuItems();
+      if (!employee?.business_id) return;
+      const data = await listMenuItems(employee.business_id);
       setMenuItems(data);
+      setCategories(getCategoriesFromMenuItems(data));
     } catch (err) {
       console.error("Failed to fetch menu items:", err);
     }
-  };
+  }, [employee?.business_id]);
 
   const fetchNextUSIN = async () => {
-    try {
-      const data = await getNextUSIN();
-      const invoiceInput = document.getElementById("invoice-number");
-      if (invoiceInput) {
-        if (data.success && data.next_usin) {
-          invoiceInput.value = data.next_usin;
-        } else {
-          invoiceInput.value = "";
-          invoiceInput.placeholder = "Invoice No (e.g., LR-01)";
-        }
-      }
-    } catch (error) {
-      console.error("❌ Error fetching next USIN:", error);
-      const invoiceInput = document.getElementById("invoice-number");
-      if (invoiceInput) {
-        invoiceInput.value = "";
-        invoiceInput.placeholder = "Enter your invoice number (e.g., LR-01, 001)";
-      }
+    const invoiceInput = document.getElementById("invoice-number");
+    if (invoiceInput) {
+      invoiceInput.value = "";
+      invoiceInput.placeholder = "Enter your invoice number (e.g., LR-01, 001)";
     }
   };
 
@@ -103,15 +95,12 @@ const POS = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost/restaurant-pos/api/customer/check_invoice.php`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ usin: invoiceNo }),
-      });
+      if (!employee?.business_id) {
+        toast.error("Missing business id. Please log in again.");
+        return;
+      }
 
-      const data = await res.json();
+      const data = await lookupInvoiceLegacy({ businessId: employee.business_id, usin: invoiceNo });
 
       if (data.success && data.invoice) {
         toast.success("✅ Invoice found! Data populated.");
@@ -266,23 +255,14 @@ const POS = () => {
   };
 
   useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const data = await getCategories();
-        setCategories(data);
-      } catch (err) {
-        console.error("Failed to fetch categories:", err);
-      }
-    };
-
     // Set initial datetime
     const now = new Date();
     const pad = (n) => (n < 10 ? "0" + n : n);
     const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
     setCurrentDateTime(formatted);
 
+    if (authLoading) return;
     fetchNextUSIN();
-    fetchCategories();
     fetchMenu();
 
     const loadSettings = async () => {
@@ -337,7 +317,7 @@ const POS = () => {
 
     loadSettings();
 
-  }, []);
+  }, [authLoading, employee?.business_id, fetchMenu]);
 
   useEffect(() => {
     const count = selectedMenuItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -611,7 +591,11 @@ const POS = () => {
       };
 
       console.log("📦 Sending to local POS DB...");
-      const result = await saveInvoiceToPOS(localPayload);
+      const result = await saveInvoiceLegacy({
+        businessId: employee?.business_id,
+        payload: localPayload,
+        isCreditUpdate: isCreditUpdate,
+      });
 
       if (result.success) {
         const actionText = isCreditUpdate ? "updated" : "saved";
@@ -678,15 +662,15 @@ const POS = () => {
             }));
           }
 
-          if (stockUpdateItems.length > 0) {
-            console.log("📦 Stock update payload:", stockUpdateItems);
+	          if (stockUpdateItems.length > 0) {
+	            console.log("📦 Stock update payload:", stockUpdateItems);
 
-            // 👈 Call with just the items array (not wrapped in an object)
-            await updateStockQuantities(stockUpdateItems);
-          } else {
-            console.log("📦 No stock changes needed");
-          }
-        }
+	            // 👈 Call with just the items array (not wrapped in an object)
+	            await applyMenuStockUpdates(stockUpdateItems);
+	          } else {
+	            console.log("📦 No stock changes needed");
+	          }
+	        }
 
       } else {
         document.getElementById("api-message").textContent =
@@ -1330,10 +1314,14 @@ const POS = () => {
                     }
 
                     try {
-                      const data = await getTotalSales(fromDate, toDate);
-                      if (data.success) {
-                        const total = parseFloat(data.total);
-                        totalSaleInput.value = isNaN(total) ? "0.00" : total.toFixed(2);
+	                      const data = await getTotalSalesLegacy({
+	                        businessId: employee?.business_id,
+	                        fromDate,
+	                        toDate,
+	                      });
+	                      if (data.success) {
+	                        const total = parseFloat(data.total);
+	                        totalSaleInput.value = isNaN(total) ? "0.00" : total.toFixed(2);
                       } else {
                         totalSaleInput.value = "0.00";
                         // alert("Error: " + data.error);
@@ -1342,10 +1330,10 @@ const POS = () => {
                     } catch (err) {
                       console.error("❌ Total sale fetch failed:", err);
                       // alert("Failed to fetch total sale");
-                      toast.error("Failed to fetch total sale");
-                    }
-                  }}
-                >
+	                      toast.error("Failed to fetch total sale");
+	                    }
+	                  }}
+	                >
                   Show
                 </button>
               </div>
@@ -1365,4 +1353,3 @@ const POS = () => {
 };
 
 export default POS;
-
