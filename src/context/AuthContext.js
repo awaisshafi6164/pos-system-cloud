@@ -15,6 +15,13 @@ export const AuthProvider = ({ children }) => {
     else employeeManager.clearEmployee();
   };
 
+  const isMembershipMissingError = (err) => {
+    const details = err?.details || "";
+    const message = err?.message || "";
+    const combined = `${message} ${details}`.trim();
+    return /0 rows/i.test(combined) || /multiple \(or no\) rows/i.test(combined) || /PGRST116/i.test(combined);
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -43,8 +50,14 @@ export const AuthProvider = ({ children }) => {
 
         const profile = await getEmployeeMembership({ authUid: sessionUser.id, businessId });
         if (isMounted) {
-          if (profile?.error) setEmployee(null);
-          else setEmployee(profile.data);
+          if (profile?.error) {
+            // Only clear auth if membership is truly missing for this business.
+            // For timeouts/network blips, keep the existing stored employee so the UI doesn't redirect.
+            if (isMembershipMissingError(profile.error)) setEmployee(null);
+            else console.warn("AuthContext: employee membership refresh failed (keeping current session)", profile.error);
+          } else {
+            setEmployee(profile.data);
+          }
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -53,8 +66,11 @@ export const AuthProvider = ({ children }) => {
 
     loadFromSession();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
+        // Token refresh events are frequent; don't re-query membership on them.
+        if (event === "TOKEN_REFRESHED") return;
+
         const sessionUser = session?.user;
         if (!sessionUser?.id) {
           setEmployee(null);
@@ -68,11 +84,15 @@ export const AuthProvider = ({ children }) => {
         }
 
         const profile = await getEmployeeMembership({ authUid: sessionUser.id, businessId });
-        if (profile?.error) setEmployee(null);
-        else setEmployee(profile.data);
+        if (profile?.error) {
+          if (isMembershipMissingError(profile.error)) setEmployee(null);
+          else console.warn("AuthContext: employee membership refresh failed (keeping current session)", profile.error);
+          return;
+        }
+        setEmployee(profile.data);
       } catch (err) {
-        // Avoid unhandled promise rejections causing the red error overlay.
-        setEmployee(null);
+        // Avoid kicking the user out on transient network issues.
+        console.warn("AuthContext: auth state change handler error (keeping current session)", err);
       }
     });
 
