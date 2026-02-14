@@ -38,6 +38,14 @@ const getAdminClient = async () => {
   });
 };
 
+const getBusinessIdHeader = (req) => {
+  const raw =
+    req.headers?.["x-business-id"] ||
+    req.headers?.["X-Business-Id"] ||
+    req.headers?.["x-business-id".toLowerCase()];
+  return raw ? String(raw).trim() : null;
+};
+
 const getRequester = async (req) => {
   const token = getBearerToken(req);
   if (!token) return { error: "Missing Authorization: Bearer <access_token>" };
@@ -49,10 +57,16 @@ const getRequester = async (req) => {
   const authUid = data?.user?.id;
   if (!authUid) return { error: "No user found for token" };
 
+  const businessId = getBusinessIdHeader(req);
+  if (!businessId) {
+    return { error: "Missing X-Business-Id header." };
+  }
+
   const { data: employee, error: employeeError } = await supabaseAdmin
     .from("employees")
     .select("id, auth_uid, business_id, email, name, role")
     .eq("auth_uid", authUid)
+    .eq("business_id", businessId)
     .single();
 
   if (employeeError) {
@@ -75,4 +89,3 @@ module.exports = {
   parseJsonBody,
   json,
 };
-

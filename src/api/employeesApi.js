@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import employeeManager from "../utils/EmployeeManager";
 
 const getAccessToken = async () => {
   const { data, error } = await supabase.auth.getSession();
@@ -10,10 +11,13 @@ const getAccessToken = async () => {
 
 const request = async (path, { method = "GET", body } = {}) => {
   const token = await getAccessToken();
+  const businessId = employeeManager.getField("business_id");
+  if (!businessId) throw new Error("Missing business id. Please log in again.");
   const res = await fetch(path, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
+      "X-Business-Id": businessId,
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -45,4 +49,3 @@ export const deleteEmployee = async (id) => {
   const json = await request("/api/employees/delete", { method: "DELETE", body: { id } });
   return json;
 };
-

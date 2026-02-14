@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import employeeManager from "../utils/EmployeeManager";
 import { supabase, isSupabaseConfigured } from "../supabaseClient";
-import { getEmployeeByAuthUid } from "../auth";
+import { getEmployeeMembership } from "../auth";
 
 const AuthContext = createContext(null);
 
@@ -34,9 +34,16 @@ export const AuthProvider = ({ children }) => {
           return;
         }
 
-        const profile = await getEmployeeByAuthUid(sessionUser.id);
+        const stored = employeeManager.getEmployee();
+        const businessId = stored?.business_id;
+        if (!businessId) {
+          if (isMounted) setEmployee(null);
+          return;
+        }
+
+        const profile = await getEmployeeMembership({ authUid: sessionUser.id, businessId });
         if (isMounted) {
-          if (profile.error) setEmployee(null);
+          if (profile?.error) setEmployee(null);
           else setEmployee(profile.data);
         }
       } finally {
@@ -47,14 +54,26 @@ export const AuthProvider = ({ children }) => {
     loadFromSession();
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const sessionUser = session?.user;
-      if (!sessionUser?.id) {
+      try {
+        const sessionUser = session?.user;
+        if (!sessionUser?.id) {
+          setEmployee(null);
+          return;
+        }
+        const stored = employeeManager.getEmployee();
+        const businessId = stored?.business_id;
+        if (!businessId) {
+          setEmployee(null);
+          return;
+        }
+
+        const profile = await getEmployeeMembership({ authUid: sessionUser.id, businessId });
+        if (profile?.error) setEmployee(null);
+        else setEmployee(profile.data);
+      } catch (err) {
+        // Avoid unhandled promise rejections causing the red error overlay.
         setEmployee(null);
-        return;
       }
-      const profile = await getEmployeeByAuthUid(sessionUser.id);
-      if (profile.error) setEmployee(null);
-      else setEmployee(profile.data);
     });
 
     return () => {

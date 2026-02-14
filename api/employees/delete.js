@@ -37,13 +37,22 @@ module.exports = async function handler(req, res) {
 
     if (deleteRowError) return json(res, 400, { error: deleteRowError.message });
 
+    // Only delete the Auth user if they have *no* remaining employee memberships.
     if (target.auth_uid && ctx.supabaseAdmin.auth?.admin?.deleteUser) {
-      const { error: deleteUserError } = await ctx.supabaseAdmin.auth.admin.deleteUser(target.auth_uid);
-      if (deleteUserError) {
-        return json(res, 200, {
-          message: "Employee row deleted, but auth user deletion failed.",
-          warning: deleteUserError.message,
-        });
+      const { data: remaining, error: remainingError } = await ctx.supabaseAdmin
+        .from("employees")
+        .select("id")
+        .eq("auth_uid", target.auth_uid)
+        .limit(1);
+
+      if (!remainingError && Array.isArray(remaining) && remaining.length === 0) {
+        const { error: deleteUserError } = await ctx.supabaseAdmin.auth.admin.deleteUser(target.auth_uid);
+        if (deleteUserError) {
+          return json(res, 200, {
+            message: "Employee membership deleted, but auth user deletion failed.",
+            warning: deleteUserError.message,
+          });
+        }
       }
     }
 
@@ -52,4 +61,3 @@ module.exports = async function handler(req, res) {
     return json(res, 500, { error: err?.message || "Server error" });
   }
 };
-

@@ -5,11 +5,13 @@ import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import settingsManager from "../utils/SettingsManager";
 import "./header.css";
 import employeeManager from "../utils/EmployeeManager";
+import { supabase } from "../supabaseClient";
 
 const Header = () => {
   const navigate = useNavigate(); // ✅ Declare navigate
   const [user, setUser] = useState(employeeManager.getEmployee());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [businessCode, setBusinessCode] = useState("");
   const [settings, setSettings] = useState({
     restaurant_name: "",
     logo_path: "",
@@ -36,6 +38,35 @@ const Header = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  useEffect(() => {
+    const loadBusinessCode = async () => {
+      try {
+        const businessId = user?.business_id;
+        if (!businessId) {
+          setBusinessCode("");
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("businesses")
+          .select("code")
+          .eq("id", businessId)
+          .single();
+
+        if (error) {
+          setBusinessCode("");
+          return;
+        }
+
+        setBusinessCode(data?.code || "");
+      } catch {
+        setBusinessCode("");
+      }
+    };
+
+    loadBusinessCode();
+  }, [user?.business_id]);
+
   // ✅ Moved out of useEffect so it's accessible to JSX
   const logoutFunction = () => {
     employeeManager.clearEmployee();
@@ -59,7 +90,10 @@ const Header = () => {
       )}
       <div className="restaurant-info">
         <h1 id="restaurant-name">{settings.restaurant_name}</h1>
-        <p>📞 {settings.phone_no} | NTN: {settings.ntn_number}</p>
+        <p>
+          {businessCode ? `Code: ${businessCode} | ` : ""}
+          📞 {settings.phone_no} | NTN: {settings.ntn_number}
+        </p>
       </div>
 
       <div className="developer-info">

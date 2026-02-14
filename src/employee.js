@@ -239,7 +239,7 @@ function Employees() {
 	                        </Box>
 	                        {!isEditing ? (
 	                          <Typography variant="caption" color="text.secondary">
-	                            Creating an employee sends an invite email to set a password.
+	                            New emails get an invite to set a password. If the email already exists, it will be linked to this business.
 	                          </Typography>
 	                        ) : null}
 	                      </Box>

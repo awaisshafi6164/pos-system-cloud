@@ -4,7 +4,7 @@ import { loginEmployee } from "./auth";
 import { useAuth } from "./context/AuthContext";
 
 const Login = () => {
-  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [formData, setFormData] = useState({ email: "", password: "", businessCode: "" });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -23,10 +23,10 @@ const Login = () => {
 
     setMessage(null);
 
-    const { email, password } = formData;
+    const { email, password, businessCode } = formData;
 
-    if (email.trim() === "" || password.trim() === "") {
-      setMessage({ type: "error", text: "Please enter both email and password." });
+    if (email.trim() === "" || password.trim() === "" || businessCode.trim() === "") {
+      setMessage({ type: "error", text: "Please enter business code, email and password." });
       return;
     }
 
@@ -34,7 +34,7 @@ const Login = () => {
 
     try {
       // 👤 Employee Login
-      const result = await loginEmployee(email, password);
+      const result = await loginEmployee(email, password, businessCode);
 
       if (result.success) {
         setEmployee(result.user);
@@ -72,6 +72,19 @@ const Login = () => {
               {message.text}
             </div>
           ) : null}
+
+          <div className="form-group">
+            <label htmlFor="businessCode">Business Code</label>
+            <input
+              type="text"
+              name="businessCode"
+              id="businessCode"
+              value={formData.businessCode}
+              onChange={handleChange}
+              placeholder="Enter your business code"
+              required
+            />
+          </div>
 
           <div className="form-group">
             <label htmlFor="email">Email</label>
