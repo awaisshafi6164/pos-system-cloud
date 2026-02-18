@@ -84,6 +84,7 @@ function Invoice() {
   const [salesReportData, setSalesReportData] = useState([]);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [gstIncluded, setGstIncluded] = useState(false);
+  const [praLinked, setPraLinked] = useState(false);
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -117,6 +118,10 @@ function Invoice() {
         if (settings.show_paid !== undefined) setShowPaid(settings.show_paid === "1");
         if (settings.show_balance !== undefined) setShowBalance(settings.show_balance === "1");
         if (settings.gst_included !== undefined) setGstIncluded(settings.gst_included === "1");
+        if (settings.pra_linked !== undefined) {
+          const v = settings.pra_linked;
+          setPraLinked(v === "1" || v === 1 || v === true);
+        }
       }
     };
     loadSettings();
@@ -542,12 +547,14 @@ function Invoice() {
                   >
                     🖨️ Print Receipt
                   </button>
-                  <button
-                    style={{ padding: "8px 16px", backgroundColor: "#d32f2f", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
-                    onClick={handleDelete}
-                  >
-                    🗑️ Delete Invoice
-                  </button>
+                  {!praLinked && (
+                    <button
+                      style={{ padding: "8px 16px", backgroundColor: "#d32f2f", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
+                      onClick={handleDelete}
+                    >
+                      🗑️ Delete Invoice
+                    </button>
+                  )}
                 </div>
               )}
             </div>

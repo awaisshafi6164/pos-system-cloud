@@ -13,6 +13,8 @@ const startOfDayIso = (yyyyMmDd) => new Date(`${yyyyMmDd}T00:00:00`).toISOString
 const endOfDayIso = (yyyyMmDd) => new Date(`${yyyyMmDd}T23:59:59`).toISOString();
 
 const mapLegacyInvoiceRow = (row, itemRows) => ({
+  id: row.id,
+  business_id: row.business_id,
   InvoiceNumber: row.pra_invoice_number || row.usin,
   USIN: row.usin,
   RefUSIN: row.ref_usin || null,

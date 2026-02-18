@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "./App.css";
 
 import POS from "./pos";
-import HotelPOS from "./hotelPos";
 import Invoice from "./invoice";
 import Employees from "./employee";
 import Menu from "./menu";
@@ -33,7 +32,7 @@ const POSRoute = () => {
 
   if (loading) return null;
 
-  return layout === "1" ? <HotelPOS /> : <POS />;
+  return <POS isHotelLayout={layout === "1"} />;
 };
 
 function App() {

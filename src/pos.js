@@ -10,6 +10,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DesktopDateTimePicker } from '@mui/x-date-pickers/DesktopDateTimePicker';
 import { DesktopDatePicker } from '@mui/x-date-pickers/DesktopDatePicker';
+import { DesktopTimePicker } from '@mui/x-date-pickers/DesktopTimePicker';
 import dayjs from 'dayjs';
 import { useNavigate } from "react-router-dom";
 import settingsManager from "./utils/SettingsManager";
@@ -18,9 +19,10 @@ import { useAuth } from "./context/AuthContext";
 import { getCategoriesFromMenuItems, listMenuItems } from "./api/menuItemsApi";
 import { lookupInvoiceLegacy, saveInvoiceLegacy, getTotalSalesLegacy } from "./api/invoicesApi";
 import { applyMenuStockUpdates } from "./api/stockApi";
+import { getBookedRoomsForDate } from "./api/bookedRoomsApi";
 import { getNextUsin } from "./api/invoiceNumberApi";
 
-const POS = () => {
+const POS = ({ isHotelLayout = false }) => {
   const { employee, loading: authLoading } = useAuth();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -28,6 +30,7 @@ const POS = () => {
   const [selectedRows, setSelectedRows] = useState([]);
   const [selectedMenuItems, setSelectedMenuItems] = useState([]);
   const [itemCount, setItemCount] = useState(0);
+  const [foodCount, setFoodCount] = useState(0);
   const [itemCost, setitemCost] = useState(0);
   const [gstAmount, setGstAmount] = useState(0);
   const [totalPayable, setTotalPayable] = useState(0);
@@ -43,6 +46,10 @@ const POS = () => {
   const [gstIncluded, setGstIncluded] = useState(false);
   const [showInvoiceNo, setShowInvoiceNo] = useState(true);
   const [showCnic, setShowCnic] = useState(true);
+  const [room_food_both, setRoomFoodBoth] = useState(true);
+  const [lock_booked_room, setLockBookedRoom] = useState(false);
+  const [search_using_name, setSearchUsingName] = useState(false);
+  const [showEmergencyContact, setShowEmergencyContact] = useState(true);
   const [showPaid, setShowPaid] = useState(true);
   const [showBalance, setShowBalance] = useState(true);
   const [showBuyerPntn, setShowBuyerPntn] = useState(true);
@@ -56,6 +63,7 @@ const POS = () => {
   const [searchText, setSearchText] = useState("");
   const [isCreditInvoice, setIsCreditInvoice] = useState(false);
   const [originalInvoiceItems, setOriginalInvoiceItems] = useState([]); // Track original quantities for credit invoices
+  const [bookedRoomCodes, setBookedRoomCodes] = useState([]);
   const isInvoiceLoading = useRef(false);
 
   // Total Sale Summary State
@@ -67,6 +75,47 @@ const POS = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   });
+  const [checkInDate, setCheckInDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
+  const [checkOutDate, setCheckOutDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
+  const [timeIn, setTimeIn] = useState(new Date().toTimeString().split(' ')[0].substring(0, 5));
+  const [timeOut, setTimeOut] = useState(new Date().toTimeString().split(' ')[0].substring(0, 5));
+  const [emergencyContact, setEmergencyContact] = useState("");
+  const [nationality, setNationality] = useState("Pakistan");
+  const [noOfDays, setNoOfDays] = useState(1);
+
+  const calculateDays = (checkIn, checkOut) => {
+    if (!checkIn || !checkOut) return 1;
+    const date1 = new Date(checkIn);
+    const date2 = new Date(checkOut);
+    const diffTime = Math.abs(date2 - date1);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays === 0 ? 1 : diffDays;
+  };
+
+  const fetchBookedRooms = useCallback(async () => {
+    if (!isHotelLayout || !lock_booked_room || !checkInDate || !timeIn) return;
+    try {
+      if (!employee?.business_id) return;
+      const result = await getBookedRoomsForDate({
+        businessId: employee.business_id,
+        checkInDate,
+      });
+      if (result && result.success) {
+        setBookedRoomCodes(result.bookedRooms || []);
+      } else {
+        setBookedRoomCodes([]);
+      }
+    } catch (err) {
+      console.error("Failed to fetch booked rooms:", err);
+      setBookedRoomCodes([]);
+    }
+  }, [isHotelLayout, lock_booked_room, checkInDate, timeIn, employee?.business_id]);
 
 
   const fetchMenu = useCallback(async () => {
@@ -106,8 +155,9 @@ const POS = () => {
 
   const handleLookupInvoice = async () => {
     const invoiceNo = document.getElementById("invoice-number").value.trim();
-    if (!invoiceNo) {
-      toast.error("Please enter an invoice number.");
+    const customerName = document.getElementById("customer-name")?.value?.trim() || "";
+    if (!invoiceNo && (!search_using_name || !customerName)) {
+      toast.error(search_using_name ? "Please enter an invoice number or customer name." : "Please enter an invoice number.");
       return;
     }
 
@@ -117,7 +167,11 @@ const POS = () => {
         return;
       }
 
-      const data = await lookupInvoiceLegacy({ businessId: employee.business_id, usin: invoiceNo });
+      const data = await lookupInvoiceLegacy({
+        businessId: employee.business_id,
+        usin: invoiceNo,
+        buyerName: search_using_name ? customerName : undefined,
+      });
 
       if (data.success && data.invoice) {
         toast.success("✅ Invoice found! Data populated.");
@@ -134,7 +188,56 @@ const POS = () => {
         if (cnicInput) cnicInput.value = data.invoice.BuyerCNIC || data.invoice.buyer_cnic || "";
         if (pntnInput) pntnInput.value = data.invoice.BuyerPNTN || data.invoice.buyer_pntn || "";
         if (contactInput) contactInput.value = data.invoice.BuyerPhoneNumber || data.invoice.buyer_phone || "";
-        if (addressInput) addressInput.value = data.invoice.address || "";
+        if (isHotelLayout) {
+          let cleanAddress = data.invoice.address || "";
+          if (cleanAddress.includes("|")) {
+            const parts = cleanAddress.split("|");
+            cleanAddress = parts.find(part =>
+              !part.trim().startsWith("In:") &&
+              !part.trim().startsWith("Out:") &&
+              !part.trim().startsWith("TimeIn:") &&
+              !part.trim().startsWith("TimeOut:") &&
+              !part.trim().startsWith("Emergency:") &&
+              !part.trim().startsWith("Nationality:")
+            )?.trim() || "";
+          }
+          if (addressInput) addressInput.value = cleanAddress;
+
+          const address = data.invoice.address || "";
+          if (address.includes("|")) {
+            const parts = address.split("|");
+            parts.forEach(part => {
+              const trimmedPart = part.trim();
+              if (trimmedPart.startsWith("In:")) {
+                setCheckInDate(trimmedPart.substring(3).trim());
+              }
+              if (trimmedPart.startsWith("Out:")) {
+                setCheckOutDate(trimmedPart.substring(4).trim());
+              }
+              if (trimmedPart.startsWith("TimeIn:")) {
+                setTimeIn(trimmedPart.substring(7).trim());
+              }
+              if (trimmedPart.startsWith("TimeOut:")) {
+                setTimeOut(trimmedPart.substring(8).trim());
+              }
+              if (trimmedPart.startsWith("Emergency:")) {
+                setEmergencyContact(trimmedPart.substring(10).trim());
+              }
+              if (trimmedPart.startsWith("Nationality:")) {
+                setNationality(trimmedPart.substring(12).trim());
+              }
+            });
+          }
+
+          if (data.invoice.check_in_date) setCheckInDate(data.invoice.check_in_date.split(" ")[0]);
+          if (data.invoice.check_out_date) setCheckOutDate(data.invoice.check_out_date.split(" ")[0]);
+          if (data.invoice.time_in) setTimeIn(data.invoice.time_in);
+          if (data.invoice.time_out) setTimeOut(data.invoice.time_out);
+          if (data.invoice.emergency_contact) setEmergencyContact(data.invoice.emergency_contact);
+          if (data.invoice.nationality) setNationality(data.invoice.nationality);
+        } else if (addressInput) {
+          addressInput.value = data.invoice.address || "";
+        }
 
         // Populate billing fields from invoice data
         setPosCharges(parseFloat(data.invoice.POS_Charges || data.invoice.pos_charges || 0));
@@ -277,6 +380,14 @@ const POS = () => {
     const pad = (n) => (n < 10 ? "0" + n : n);
     const formatted = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
     setCurrentDateTime(formatted);
+    if (isHotelLayout) {
+      const currentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
+      setCheckInDate(currentDate);
+      setCheckOutDate(currentDate);
+      setTimeIn(currentTime);
+      setTimeOut(currentTime);
+    }
 
     if (authLoading) return;
     fetchNextUSIN();
@@ -294,6 +405,16 @@ const POS = () => {
           setShowInvoiceNo(showInvoiceNo);
           const showCnic = settings.show_cnic === "1";
           setShowCnic(showCnic);
+          if (isHotelLayout) {
+            const roomFoodBoth = settings.room_food_both === "1";
+            setRoomFoodBoth(roomFoodBoth);
+            const lockBookedRoom = settings.lock_booked_room === "1";
+            setLockBookedRoom(lockBookedRoom);
+            const showEmergencyContact = settings.show_emerg_contact === "1";
+            setShowEmergencyContact(showEmergencyContact);
+          }
+          const searchUsingName = settings.search_using_name === "1";
+          setSearchUsingName(searchUsingName);
           const makeInvoiceEditable = settings.make_invoice_editable === "1";
           setMakeInvoiceEditable(makeInvoiceEditable);
           const showPaid = settings.show_paid === "1";
@@ -334,10 +455,16 @@ const POS = () => {
 
     loadSettings();
 
-  }, [authLoading, employee?.business_id, fetchMenu, fetchNextUSIN]);
+  }, [authLoading, employee?.business_id, fetchMenu, fetchNextUSIN, isHotelLayout]);
 
   useEffect(() => {
-    const count = selectedMenuItems.reduce((sum, item) => sum + item.quantity, 0);
+    const roomLineCount = selectedMenuItems.filter(item => item.itemName.toLowerCase().includes('room')).length;
+    const foodQty = selectedMenuItems
+      .filter(item => !item.itemName.toLowerCase().includes('room'))
+      .reduce((sum, item) => sum + item.quantity, 0);
+    const count = isHotelLayout
+      ? (room_food_both ? roomLineCount : roomLineCount)
+      : selectedMenuItems.reduce((sum, item) => sum + item.quantity, 0);
     const rawCost = selectedMenuItems.reduce((sum, item) => sum + (item.itemPrice * item.quantity), 0);
 
     let netitemCost = rawCost;
@@ -361,12 +488,13 @@ const POS = () => {
     // - parseFloat(balance || 0);
 
     setItemCount(count);
+    setFoodCount(isHotelLayout && room_food_both ? foodQty : 0);
     setitemCost(netitemCost.toFixed(2));
     setGstAmount(gst);
     setTotalPayable(total.toFixed(2));
 
     setBalance((total - parseFloat(paid || 0)).toFixed(2));
-  }, [selectedMenuItems, posCharges, serviceCharges, discount, balance, paid, gstPercentage, gstIncluded]);
+  }, [selectedMenuItems, posCharges, serviceCharges, discount, balance, paid, gstPercentage, gstIncluded, isHotelLayout, room_food_both]);
 
   // New useEffect to handle Service Charges Calculation
   useEffect(() => {
@@ -385,11 +513,29 @@ const POS = () => {
     }
   }, [itemCost, gstAmount, serviceChargesType, serviceChargesPercentage]);
 
+  useEffect(() => {
+    if (!isHotelLayout) return;
+    const days = calculateDays(checkInDate, checkOutDate);
+    setNoOfDays(days);
+    fetchBookedRooms();
+    setSelectedMenuItems(prev => prev.map(item => {
+      const isRoom = item.itemName.toLowerCase().includes('room');
+      return isRoom ? { ...item, quantity: days } : item;
+    }));
+  }, [isHotelLayout, checkInDate, checkOutDate, timeIn, fetchBookedRooms]);
+
   const filteredItems = menuItems.filter(
     (item) => categoryFilter === "" || item.itemCategory === categoryFilter
   );
 
   const handleRowClick = (itemCode) => {
+    const item = menuItems.find(i => i.itemCode === itemCode);
+    const isRoom = item?.itemName.toLowerCase().includes('room');
+    if (isHotelLayout && lock_booked_room && !isCreditInvoice && isRoom && bookedRoomCodes.includes(itemCode)) {
+      toast.error(`${item.itemName} is already booked for the selected dates.`);
+      return;
+    }
+
     const isAlreadySelected = selectedRows.includes(itemCode);
 
     if (isAlreadySelected) {
@@ -398,7 +544,6 @@ const POS = () => {
       setSelectedMenuItems(prev => prev.filter(item => item.itemCode !== itemCode));
     } else {
       // Select and add to selectedMenuItems
-      const item = menuItems.find(i => i.itemCode === itemCode);
       if (item) {
         // ✅ Stock check before adding
         if (showMenuStockQty && item.stockQty <= 0) {
@@ -406,7 +551,8 @@ const POS = () => {
           return;
         }
         setSelectedRows(prev => [...prev, itemCode]);
-        setSelectedMenuItems(prev => [...prev, { ...item, quantity: 1 }]);
+        const initialQuantity = isHotelLayout && isRoom ? noOfDays : 1;
+        setSelectedMenuItems(prev => [...prev, { ...item, quantity: initialQuantity }]);
       }
     }
   };
@@ -424,6 +570,18 @@ const POS = () => {
     if (pntnInput) pntnInput.value = "";
     if (contactInput) contactInput.value = "";
     if (addressInput) addressInput.value = "";
+    if (isHotelLayout) {
+      const now = new Date();
+      const currentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
+      setCheckInDate(currentDate);
+      setCheckOutDate(currentDate);
+      setTimeIn(currentTime);
+      setTimeOut(currentTime);
+      setEmergencyContact("");
+      setNationality("Pakistan");
+      await fetchBookedRooms();
+    }
     document.getElementById("api-message").textContent = "🗒️ Note";
 
     // 👈 Reset invoice type to "new" (default)
@@ -442,6 +600,7 @@ const POS = () => {
     setSelectedMenuItems([]);
     setOriginalInvoiceItems([]); // 👈 Clear original items
     setItemCount(0);
+    setFoodCount(0);
     setitemCost(0);
     setGstAmount(0);
     setDiscount(0);
@@ -514,6 +673,19 @@ const POS = () => {
       // Calculate actual service charges value from current field value
       const actualServiceCharges = parseFloat(document.getElementById("service-charges")?.value || 0);
       const furtherTaxValue = parseFloat(posCharges || 0) + actualServiceCharges;
+      const baseAddress = document.getElementById("address").value || "";
+      const hotelInfo = [];
+      if (isHotelLayout) {
+        if (checkInDate) hotelInfo.push(`In: ${checkInDate}`);
+        if (checkOutDate) hotelInfo.push(`Out: ${checkOutDate}`);
+        if (timeIn) hotelInfo.push(`TimeIn: ${timeIn}`);
+        if (timeOut) hotelInfo.push(`TimeOut: ${timeOut}`);
+        if (emergencyContact) hotelInfo.push(`Emergency: ${emergencyContact}`);
+        if (nationality) hotelInfo.push(`Nationality: ${nationality}`);
+      }
+      const fullAddress = isHotelLayout && hotelInfo.length > 0
+        ? (baseAddress ? `${baseAddress} | ${hotelInfo.join(" | ")}` : hotelInfo.join(" | "))
+        : baseAddress;
 
       const payload = {
         InvoiceNumber: "",
@@ -530,7 +702,7 @@ const POS = () => {
         Discount: parseFloat(discount) || 0,
         FurtherTax: furtherTaxValue,
         TotalBillAmount: parseFloat(totalPayable),
-        TotalQuantity: parseInt(itemCount),
+        TotalQuantity: isHotelLayout ? parseInt(itemCount) + parseInt(foodCount) : parseInt(itemCount),
         PaymentMode: paymentMode === "online" ? 1 : getPaymentCode(paymentMode),
         InvoiceType: getInvoiceTypeCode(invoiceType),
         Items: selectedMenuItems.map(item => {
@@ -599,12 +771,20 @@ const POS = () => {
 
       const localPayload = {
         ...payload,
-        address: document.getElementById("address").value || "",
+        address: fullAddress,
         POS_Charges: parseFloat(posCharges || 0),
         Service_Charges: actualServiceCharges,
         Balance: parseFloat(balance || 0),
         Paid: parseFloat(paid || 0),
-        PaymentMode: getPaymentCode(paymentMode)
+        PaymentMode: getPaymentCode(paymentMode),
+        ...(isHotelLayout ? {
+          checkInDate,
+          checkOutDate,
+          timeIn,
+          timeOut,
+          emergencyContact,
+          nationality,
+        } : {})
       };
 
       console.log("📦 Sending to local POS DB...");
@@ -716,6 +896,18 @@ const POS = () => {
       console.error("❌ Required input fields not found in DOM.");
       return;
     }
+    let cleanAddress = addressInput?.value || "";
+    if (isHotelLayout && cleanAddress.includes("|")) {
+      const parts = cleanAddress.split("|");
+      cleanAddress = parts.find(part =>
+        !part.trim().startsWith("In:") &&
+        !part.trim().startsWith("Out:") &&
+        !part.trim().startsWith("TimeIn:") &&
+        !part.trim().startsWith("TimeOut:") &&
+        !part.trim().startsWith("Emergency:") &&
+        !part.trim().startsWith("Nationality:")
+      )?.trim() || "";
+    }
 
     navigate("/receipt", {
       state: {
@@ -725,11 +917,19 @@ const POS = () => {
           cnic: cnicInput?.value || "",
           pntn: pntnInput?.value || "",
           contact: contactInput?.value || "",
-          address: addressInput?.value || "",
+          address: cleanAddress,
+          ...(isHotelLayout ? {
+            checkInDate,
+            checkOutDate,
+            timeIn,
+            timeOut,
+            emergencyContact,
+            nationality,
+          } : {}),
           dateTime: currentDateTime,
         },
         billing: {
-          itemCount,
+          itemCount: isHotelLayout ? parseInt(itemCount) + parseInt(foodCount) : itemCount,
           itemCost,
           gstAmount,
           posCharges,
@@ -760,7 +960,7 @@ const POS = () => {
             <div className="vertical-subsection">
               {/* Left Top Section */}
               <div className="subsection top">
-                <h3>Customer Information</h3>
+                <h3>{isHotelLayout ? "Guest Information" : "Customer Information"}</h3>
                 <div className="invoice-type-container">
                   <div className="invoice-type-tabs">
                     <label className={`invoice-type-tab ${!isCreditInvoice ? 'active' : ''}`}>
@@ -797,7 +997,7 @@ const POS = () => {
                 </div>
 
                 <div className="horizontal-group" style={{ display: showInvoiceNo ? "flex" : "none" }}>
-                  <label htmlFor="invoice-number">Invoice No*</label>
+                  <label htmlFor="invoice-number">{isHotelLayout && isCreditInvoice ? "Invoice/Room" : "Invoice No*"}</label>
                   <input
                     type="text"
                     id="invoice-number"
@@ -841,55 +1041,175 @@ const POS = () => {
                   <label htmlFor="cnic">CNIC</label>
                   <input type="text" id="cnic" placeholder="XXXXX-XXXXXXX-X" tabIndex={3} />
                 </div>
+                {isHotelLayout && (
+                  <div className="horizontal-group"
+                    style={{ display: showEmergencyContact ? "flex" : "none" }}
+                  >
+                    <label htmlFor="emergency-contact">E-Contact</label>
+                    <input
+                      type="tel"
+                      id="emergency-contact"
+                      placeholder="Emergency Contact"
+                      value={emergencyContact}
+                      onChange={(e) => setEmergencyContact(e.target.value)}
+                      tabIndex={4}
+                    />
+                  </div>
+                )}
                 <div className="horizontal-group"
                   style={{ display: showBuyerPntn ? "flex" : "none" }}
                 >
                   <label htmlFor="pntn">Buyer PNTN</label>
-                  <input type="text" id="pntn" placeholder="Optional" tabIndex={4} />
+                  <input type="text" id="pntn" placeholder="Optional" tabIndex={5} />
                 </div>
+                {isHotelLayout && (
+                  <div className="horizontal-group">
+                    <label htmlFor="nationality">Nationality</label>
+                    <select
+                      id="nationality"
+                      className="form-control"
+                      value={nationality}
+                      onChange={(e) => setNationality(e.target.value)}
+                      tabIndex={6}
+                    >
+                      <option value="Pakistan">Pakistan</option>
+                      <option value="Foreign">Foreign</option>
+                    </select>
+                  </div>
+                )}
                 <div className="horizontal-group"
                   style={{ display: showAddress ? "flex" : "none" }}
                 >
                   <label htmlFor="address">Address</label>
-                  <input type="tel" id="address" placeholder="address" tabIndex={5} />
+                  <input type="tel" id="address" placeholder="address" tabIndex={7} />
                 </div>
                 <div className="horizontal-group">
                   <label htmlFor="contact-no">Contact</label>
-                  <input type="tel" id="contact-no" placeholder="03XX-XXXXXXX" tabIndex={6} />
+                  <input type="tel" id="contact-no" placeholder="03XX-XXXXXXX" tabIndex={8} />
                 </div>
-                <div className="horizontal-group"
-                  style={{ display: showDate ? "flex" : "none" }}
-                >
-                  <label htmlFor="datetime">Date-Time*</label>
-                  <div style={{ flex: 1 }}>
-                    <DesktopDateTimePicker
-                      value={dayjs(currentDateTime)}
-                      onChange={(newValue) => setCurrentDateTime(newValue.format('YYYY-MM-DDTHH:mm'))}
-                      slotProps={{
-                        textField: {
-                          size: 'small',
-                          tabIndex: 7,
-                          sx: {
-                            width: '100%',
-                            '& .MuiInputBase-input': {
-                              fontSize: '12px'
+                {isHotelLayout ? (
+                  <div style={{ display: showDate ? "block" : "none", paddingBottom: "10px" }}>
+                    <label style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "5px", display: "block" }}>Check-In</label>
+                    <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+                      <DesktopDatePicker
+                        value={dayjs(checkInDate, 'YYYY-MM-DD')}
+                        onChange={(newValue) => setCheckInDate(newValue.format('YYYY-MM-DD'))}
+                        slotProps={{
+                          textField: {
+                            size: 'small',
+                            tabIndex: 9,
+                            sx: {
+                              flex: 2,
+                              minWidth: '100px',
+                              '& .MuiInputBase-input': { fontSize: '12px' }
                             }
                           }
-                        }
-                      }}
-                    />
+                        }}
+                      />
+                      <DesktopTimePicker
+                        value={dayjs(`2022-04-17T${timeIn}`)}
+                        onChange={(newValue) => setTimeIn(newValue.format('HH:mm'))}
+                        slotProps={{
+                          textField: {
+                            size: 'small',
+                            tabIndex: 10,
+                            sx: {
+                              flex: 1,
+                              minWidth: '120px',
+                              '& .MuiInputBase-input': { fontSize: '12px' }
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                    <label style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "5px", display: "block" }}>Check-Out</label>
+                    <div style={{ display: "flex", gap: "10px" }}>
+                      <DesktopDatePicker
+                        value={dayjs(checkOutDate, 'YYYY-MM-DD')}
+                        onChange={(newValue) => setCheckOutDate(newValue.format('YYYY-MM-DD'))}
+                        slotProps={{
+                          textField: {
+                            size: 'small',
+                            tabIndex: 11,
+                            sx: {
+                              flex: 2,
+                              minWidth: '100px',
+                              '& .MuiInputBase-input': { fontSize: '12px' }
+                            }
+                          }
+                        }}
+                      />
+                      <DesktopTimePicker
+                        value={dayjs(`2022-04-17T${timeOut}`)}
+                        onChange={(newValue) => setTimeOut(newValue.format('HH:mm'))}
+                        slotProps={{
+                          textField: {
+                            size: 'small',
+                            tabIndex: 12,
+                            sx: {
+                              flex: 1,
+                              minWidth: '120px',
+                              '& .MuiInputBase-input': { fontSize: '12px' }
+                            }
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="horizontal-group"
+                    style={{ display: showDate ? "flex" : "none" }}
+                  >
+                    <label htmlFor="datetime">Date-Time*</label>
+                    <div style={{ flex: 1 }}>
+                      <DesktopDateTimePicker
+                        value={dayjs(currentDateTime)}
+                        onChange={(newValue) => setCurrentDateTime(newValue.format('YYYY-MM-DDTHH:mm'))}
+                        slotProps={{
+                          textField: {
+                            size: 'small',
+                            tabIndex: 7,
+                            sx: {
+                              width: '100%',
+                              '& .MuiInputBase-input': {
+                                fontSize: '12px'
+                              }
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Left Center Section */}
               <div className="subsection center">
                 <h3>Billing Details</h3>
 
-                <div className="horizontal-group">
-                  <label htmlFor="item-count">No. of Items</label>
-                  <input type="number" id="item-count" placeholder="0" min="0" readOnly value={itemCount} />
-                </div>
+                {isHotelLayout ? (
+                  <div className="horizontal-group" style={{ display: 'flex', gap: '10px' }}>
+                    <div style={{ flex: 1 }}>
+                      <label htmlFor="item-count">Rooms Qty </label>
+                      <input type="number" id="item-count" placeholder="0" min="0" readOnly value={itemCount} style={{ width: '40px' }} />
+                    </div>
+                    {room_food_both && (
+                      <div style={{ flex: 1 }}>
+                        <label htmlFor="food-count">Food Qty </label>
+                        <input type="number" id="food-count" placeholder="0" min="0" readOnly value={foodCount} style={{ width: '40px' }} />
+                      </div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <label htmlFor="no-of-days">Days Qty </label>
+                      <input type="number" id="no-of-days" placeholder="1" min="1" readOnly value={noOfDays} style={{ width: '40px' }} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="horizontal-group">
+                    <label htmlFor="item-count">No. of Items</label>
+                    <input type="number" id="item-count" placeholder="0" min="0" readOnly value={itemCount} />
+                  </div>
+                )}
 
                 <div className="horizontal-group">
                   <label htmlFor="item-cost">Item Cost</label>
@@ -1038,7 +1358,7 @@ const POS = () => {
             <div className="menu-split-layout">
               <div className="menu-left">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: "10px" }}>
-                  <h2>Menu Section</h2>
+                  <h2>{isHotelLayout && !room_food_both ? "Room Section" : "Menu Section"}</h2>
                   <div className="search-box">
                     <input
                       type="text"
@@ -1061,8 +1381,13 @@ const POS = () => {
                               return matchesCategory && matchesSearch;
                             });
                           if (filtered.length > 0) {
-                            handleRowClick(filtered[0].itemCode);
-                            setSearchText("");
+                            const firstItem = filtered[0];
+                            const isRoom = firstItem.itemName.toLowerCase().includes('room');
+                            const isBooked = isHotelLayout && lock_booked_room && !isCreditInvoice && isRoom && bookedRoomCodes.includes(firstItem.itemCode);
+                            if (!isBooked) {
+                              handleRowClick(firstItem.itemCode);
+                              setSearchText("");
+                            }
                           }
                         }
                       }}
@@ -1111,6 +1436,8 @@ const POS = () => {
                           })
                           .map((item, index) => {
                             const selected = selectedRows.includes(item.itemCode);
+                            const isRoom = item.itemName.toLowerCase().includes('room');
+                            const isBooked = isHotelLayout && lock_booked_room && !isCreditInvoice && isRoom && bookedRoomCodes.includes(item.itemCode);
                             return (
                               <TableRow
                                 key={item.itemCode}
@@ -1118,10 +1445,12 @@ const POS = () => {
                                 onClick={() => handleRowClick(item.itemCode)}
                                 selected={selected}
                                 sx={{
-                                  cursor: "pointer",
+                                  cursor: isBooked ? "not-allowed" : "pointer",
                                   '&.Mui-selected': {
                                     backgroundColor: '#cfe8fbff !important',
                                   },
+                                  backgroundColor: isBooked ? '#fcbcc5ff !important' : 'inherit',
+                                  opacity: isBooked ? 0.6 : 1,
                                   borderBottom: "1px solid #ddd",
                                   height: "26px"
                                 }}
@@ -1173,85 +1502,87 @@ const POS = () => {
           <section className="section right-section">
             {/* Center: Selected Items */}
             <div className="right-top">
-              <h2>Selected Items</h2>
+              <h2>{isHotelLayout && !room_food_both ? "Selected Room" : "Selected Items"}</h2>
               <div className="selected-items-table-container">
                 <table className="selected-items-table" style={{ borderCollapse: "collapse", width: "100%", fontFamily: "Arial", fontSize: "13px" }}>
                   <thead>
                     <tr style={{ backgroundColor: "#fff", height: "26px", borderBottom: "1px solid #ddd" }}>
                       <th style={{ border: "1px solid #000", textAlign: "center" }}>Code</th>
                       <th style={{ border: "1px solid #000", textAlign: "left" }}>Item</th>
-                      <th style={{ border: "1px solid #000" }}></th>
-                      <th style={{ border: "1px solid #000", textAlign: "center" }}>Qty</th>
-                      <th style={{ border: "1px solid #000" }}></th>
+                      {(!isHotelLayout || room_food_both) && <th style={{ border: "1px solid #000" }}></th>}
+                      {(!isHotelLayout || room_food_both) && <th style={{ border: "1px solid #000", textAlign: "center" }}>Qty</th>}
+                      {(!isHotelLayout || room_food_both) && <th style={{ border: "1px solid #000" }}></th>}
                       <th style={{ border: "1px solid #000", textAlign: "center" }}>Price</th>
                       <th style={{ border: "1px solid #000" }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedMenuItems.map((item, index) => (
-                      <tr key={index} style={{ height: "26px", borderBottom: "1px solid #ddd" }}>
-                        <td style={{ border: "1px solid #000", textAlign: "center" }}>{item.itemCode}</td>
-                        <td style={{ border: "1px solid #000", textAlign: "left" }}>{item.itemName}</td>
-                        <td style={{ border: "1px solid #000", textAlign: "center" }}>
-                          <button className="qty-btn" onClick={() => {
-                            setSelectedMenuItems(prev =>
-                              prev.map((itm, idx) =>
-                                idx === index
-                                  ? { ...itm, quantity: Math.max(1, itm.quantity - 1) }
-                                  : itm
-                              )
-                            );
-                          }}>−</button>
-                        </td>
-                        <td style={{ border: "1px solid #000", textAlign: "center" }}>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const newQty = parseInt(e.target.value, 10);
+                    {selectedMenuItems.map((item, index) => {
+                      const isRoom = item.itemName.toLowerCase().includes('room');
+                      return (
+                        <tr key={index} style={{ height: "26px", borderBottom: "1px solid #ddd" }}>
+                          <td style={{ border: "1px solid #000", textAlign: "center" }}>{item.itemCode}</td>
+                          <td style={{ border: "1px solid #000", textAlign: "left" }}>{item.itemName}</td>
+                          {(!isHotelLayout || room_food_both) && (
+                            <td style={{ border: "1px solid #000", textAlign: "center" }}>
+                              {(!isHotelLayout || !isRoom) && (
+                                <button className="qty-btn" onClick={() => {
+                                  setSelectedMenuItems(prev =>
+                                    prev.map((itm, idx) =>
+                                      idx === index
+                                        ? { ...itm, quantity: Math.max(1, itm.quantity - 1) }
+                                        : itm
+                                    )
+                                  );
+                                }}>−</button>
+                              )}
+                            </td>
+                          )}
+                          {(!isHotelLayout || room_food_both) && (
+                            <td style={{ border: "1px solid #000", textAlign: "center" }}>
+                              {isHotelLayout ? (!isRoom && item.quantity) : (
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const newQty = parseInt(e.target.value, 10);
 
-                              if (isNaN(newQty) || newQty < 1) return;
+                                    if (isNaN(newQty) || newQty < 1) return;
+                                    if (showMenuStockQty && newQty > item.stockQty) {
+                                      toast.warn(`Only ${item.stockQty} of ${item.itemName} available.`);
+                                      return;
+                                    }
+                                    setSelectedMenuItems(prev =>
+                                      prev.map((itm, idx) =>
+                                        idx === index ? { ...itm, quantity: newQty } : itm
+                                      )
+                                    );
+                                  }}
+                                  style={{ width: "50px", textAlign: "center", fontSize: "13px", padding: "2px" }}
+                                />
+                              )}
+                            </td>
+                          )}
 
-                              if (showMenuStockQty && newQty > item.stockQty) {
-                                toast.warn(`Only ${item.stockQty} of ${item.itemName} available.`);
-                                return;
-                              }
-
-                              setSelectedMenuItems(prev =>
-                                prev.map((itm, idx) =>
-                                  idx === index ? { ...itm, quantity: newQty } : itm
-                                )
-                              );
-                            }}
-                            style={{
-                              width: "50px",
-                              textAlign: "center",
-                              fontSize: "13px",
-                              padding: "2px"
-                            }}
-                          />
-                        </td>
-
-                        <td style={{ border: "1px solid #000", textAlign: "center" }}>
-                          <button className="qty-btn" onClick={() => {
-                            const currentItem = selectedMenuItems[index];
-                            // ✅ Perform check outside the state updater
-                            if (showMenuStockQty && currentItem.quantity + 1 > currentItem.stockQty) {
-                              toast.warn(`Only ${currentItem.stockQty} of ${currentItem.itemName} available.`);
-                              return; // Exit without updating state
-                            }
-
-                            // If check passes, update the state
-                            setSelectedMenuItems(prev =>
-                              prev.map((itm, idx) =>
-                                idx === index
-                                  ? { ...itm, quantity: itm.quantity + 1 }
-                                  : itm
-                              )
-                            );
-                          }}>+</button>
-                        </td>
+                          {(!isHotelLayout || room_food_both) && (
+                            <td style={{ border: "1px solid #000", textAlign: "center" }}>
+                              {(!isHotelLayout || !isRoom) && (
+                                <button className="qty-btn" onClick={() => {
+                                  const currentItem = selectedMenuItems[index];
+                                  if (showMenuStockQty && currentItem.quantity + 1 > currentItem.stockQty) {
+                                    toast.warn(`Only ${currentItem.stockQty} of ${currentItem.itemName} available.`);
+                                    return;
+                                  }
+                                  setSelectedMenuItems(prev =>
+                                    prev.map((itm, idx) =>
+                                      idx === index ? { ...itm, quantity: itm.quantity + 1 } : itm
+                                    )
+                                  );
+                                }}>+</button>
+                              )}
+                            </td>
+                          )}
                         <td style={{ border: "1px solid #000", textAlign: "center" }}>{(item.itemPrice * item.quantity).toFixed(2)}</td>
                         <td style={{ border: "1px solid #000", textAlign: "center" }}>
                           <button className="del-btn" onClick={() => {
@@ -1259,8 +1590,9 @@ const POS = () => {
                             setSelectedRows(prev => prev.filter(code => code !== item.itemCode));
                           }}>x</button>
                         </td>
-                      </tr>
-                    ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
