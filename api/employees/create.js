@@ -56,7 +56,14 @@ module.exports = async function handler(req, res) {
         });
       }
 
-      const invite = await ctx.supabaseAdmin.auth.admin.inviteUserByEmail(email);
+      // redirectTo tells Supabase where to send the user after they click the invite link.
+      // This must match a URL in your Supabase Dashboard > Auth > URL Configuration > Redirect URLs.
+      const siteUrl = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.SITE_URL || "http://localhost:3000";
+      const invite = await ctx.supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        redirectTo: `${siteUrl}/reset-password`,
+      });
       if (invite.error) return json(res, 400, { error: invite.error.message });
 
       authUid = invite.data?.user?.id;
