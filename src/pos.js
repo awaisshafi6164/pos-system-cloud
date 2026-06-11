@@ -21,6 +21,7 @@ import { lookupInvoiceLegacy, saveInvoiceLegacy, getTotalSalesLegacy } from "./a
 import { applyMenuStockUpdates } from "./api/stockApi";
 import { getBookedRoomsForDate } from "./api/bookedRoomsApi";
 import { getNextUsin } from "./api/invoiceNumberApi";
+import { supabase } from "./supabaseClient";
 
 const POS = ({ isHotelLayout = false }) => {
   const { employee, loading: authLoading } = useAuth();
@@ -738,26 +739,35 @@ const POS = ({ isHotelLayout = false }) => {
 
       // Conditionally send to PRA ONLY for new invoices (not credit updates)
       if (pra_linked === "1") {
-        const praURL =
-          pra_api_type === "production"
-            ? "https://ims.pral.com.pk/ims/production/api/Live/PostData"
-            : "https://ims.pral.com.pk/ims/sandbox/api/Live/PostData";
+        // Get auth token + business ID to call our Vercel serverless proxy
+        const { data: sessionData } = await supabase.auth.getSession();
+        const accessToken = sessionData?.session?.access_token;
+        if (!accessToken) {
+          document.getElementById("api-message").textContent = "❌ Error: Not authenticated. Please log in again.";
+          setIsSaving(false);
+          return;
+        }
 
-        console.log("📤 Sending to PRA API:", praURL);
-        const praResponse = await fetch(praURL, {
+        console.log(`📤 Sending to PRA via serverless proxy (${pra_api_type})...`);
+        const praResponse = await fetch("/api/pra/post-invoice", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${pra_token}`
+            "Authorization": `Bearer ${accessToken}`,
+            "X-Business-Id": employee.business_id,
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            invoiceData: payload,
+            praToken: pra_token,
+            environment: pra_api_type, // "sandbox" or "production"
+          }),
         });
 
         const praResult = await praResponse.json();
         console.log("✅ PRA API Response:", praResult);
 
         if (praResult.Code !== "100") {
-          document.getElementById("api-message").textContent = "❌ PRA Error: " + praResult.Response;
+          document.getElementById("api-message").textContent = "❌ PRA Error: " + (praResult.Response || praResult.error || "Unknown error");
           setIsSaving(false);
           return;
         }
