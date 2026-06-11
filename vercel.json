@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/pra/post-invoice.js": {
+      "maxDuration": 30
+    }
+  }
+}
