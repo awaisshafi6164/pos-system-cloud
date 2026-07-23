@@ -1,11 +1,24 @@
 import { supabase } from "../supabaseClient";
+import employeeManager from "../utils/EmployeeManager";
 
 export const getNextUsin = async () => {
-  // Use a "peek" function so refreshing / React StrictMode doesn't consume numbers.
-  // SQL function to create: `peek_next_usin()`.
-  const { data, error } = await supabase.rpc("peek_next_usin");
+  const businessId = employeeManager.getField("business_id");
+  if (!businessId) throw new Error("Missing business_id");
+
+  const { data, error } = await supabase
+    .from("invoice_counters")
+    .select("next_number, prefix, pad")
+    .eq("business_id", businessId)
+    .maybeSingle();
+
   if (error) throw new Error(error.message);
-  // eslint-disable-next-line no-console
-  console.debug("[invoice] peek_next_usin:", data);
-  return data; // function returns text
+
+  if (!data) {
+    // No counter exists yet — return "1"
+    return "1";
+  }
+
+  const { next_number, prefix, pad } = data;
+  const paddedNum = String(next_number).padStart(pad || 1, "0");
+  return `${prefix || ""}${paddedNum}`;
 };
