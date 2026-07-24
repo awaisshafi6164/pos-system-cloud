@@ -30,7 +30,8 @@ import {
   Edit,
   Delete,
   Search,
-  FilterList
+  FilterList,
+  Sync
 } from "@mui/icons-material";
 import settingsManager from "./utils/SettingsManager";
 import { useAuth } from "./context/AuthContext";
@@ -41,6 +42,7 @@ import {
   listMenuItems,
   updateMenuItem,
 } from "./api/menuItemsApi";
+import { getMenuCache, setMenuCache } from "./utils/menuCache";
 
 function Menu() {
   const { employee, loading: authLoading } = useAuth();
@@ -56,23 +58,55 @@ function Menu() {
     itemCode: "", itemName: "", itemCategory: "", itemPrice: "", stockQty: ""
   });
   const [busy, setBusy] = useState(false);
+  const [lastSynced, setLastSynced] = useState(null);
   
-  // Fetch all menu
-  const loadmenu = useCallback(async () => {
+  // Load menu from cache or API
+  const loadmenu = useCallback(async (forceSync = false) => {
     if (!employee?.business_id) return;
+
+    // Try cache first (unless forced sync)
+    if (!forceSync) {
+      const cached = getMenuCache(employee.business_id);
+      if (cached) {
+        setmenu(cached.items);
+        setCategories(getCategoriesFromMenuItems(cached.items));
+        setLastSynced(cached.lastSynced);
+        return;
+      }
+    }
+
+    // Fetch from API
     const data = await listMenuItems(employee.business_id);
     setmenu(data);
     setCategories(getCategoriesFromMenuItems(data));
+    setMenuCache(employee.business_id, data);
+    setLastSynced(new Date().toISOString());
   }, [employee?.business_id]);
+
+  // Sync button handler
+  const handleSync = async () => {
+    setBusy(true);
+    try {
+      await loadmenu(true);
+      toast.success("Menu synced!");
+    } catch (err) {
+      toast.error(err?.message || "Failed to sync menu");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Add menu
   const handleAdd = async (e) => {
     e?.preventDefault?.();
     setBusy(true);
     try {
-      await createMenuItem(form, employee.business_id);
+      const newItem = await createMenuItem(form, employee.business_id);
       toast.success("Menu Added!");
-      await loadmenu();
+      const updatedMenu = [...menu, newItem].sort((a, b) => a.itemName.localeCompare(b.itemName));
+      setmenu(updatedMenu);
+      setCategories(getCategoriesFromMenuItems(updatedMenu));
+      setMenuCache(employee.business_id, updatedMenu);
       setForm({ itemCode: "", itemName: "", itemCategory: "", itemPrice: "", stockQty: "" });
     } catch (err) {
       toast.error(err?.message || "Failed to add menu item");
@@ -116,9 +150,12 @@ function Menu() {
     e.preventDefault();
     setBusy(true);
     try {
-      await updateMenuItem(editingId, form, employee.business_id);
+      const updatedItem = await updateMenuItem(editingId, form, employee.business_id);
       toast.success("Menu Updated!");
-      await loadmenu();
+      const updatedMenu = menu.map((m) => m.id === editingId ? updatedItem : m);
+      setmenu(updatedMenu);
+      setCategories(getCategoriesFromMenuItems(updatedMenu));
+      setMenuCache(employee.business_id, updatedMenu);
       setForm({ itemCode: "", itemName: "", itemCategory: "", itemPrice: "", stockQty: "" });
       setIsEditing(false);
       setEditingId(null);
@@ -135,7 +172,10 @@ function Menu() {
       try {
         await deleteMenuItem(menuId, employee.business_id);
         toast.success("Menu item deleted successfully!");
-        setmenu((prev) => prev.filter((e) => e.id !== menuId));
+        const updatedMenu = menu.filter((e) => e.id !== menuId);
+        setmenu(updatedMenu);
+        setCategories(getCategoriesFromMenuItems(updatedMenu));
+        setMenuCache(employee.business_id, updatedMenu);
       } catch (err) {
         toast.error(err?.message || "Failed to delete menu item");
       } finally {
@@ -285,8 +325,20 @@ function Menu() {
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
                             {filteredMenu.length} Items
+                            {lastSynced && ` • Last synced: ${new Date(lastSynced).toLocaleString()}`}
                           </Typography>
                         </Box>
+                        <Tooltip title="Sync menu from server">
+                          <Button
+                            variant="outlined"
+                            startIcon={<Sync />}
+                            onClick={handleSync}
+                            disabled={busy}
+                            size="small"
+                          >
+                            Sync
+                          </Button>
+                        </Tooltip>
                       </Box>
                       
                       <Grid container spacing={2} sx={{ mb: 3 }}>

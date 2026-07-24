@@ -350,3 +350,9 @@
     font-weight: 600;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
+
+/* Spinner animation for save button */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}

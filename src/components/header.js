@@ -7,11 +7,16 @@ import "./header.css";
 import employeeManager from "../utils/EmployeeManager";
 import { supabase } from "../supabaseClient";
 
+const BUSINESS_CODE_KEY = "pos_business_code";
+
 const Header = () => {
   const navigate = useNavigate(); // ✅ Declare navigate
   const [user, setUser] = useState(employeeManager.getEmployee());
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [businessCode, setBusinessCode] = useState("");
+  const [businessCode, setBusinessCode] = useState(() => {
+    // Load from localStorage immediately (no flash)
+    return localStorage.getItem(BUSINESS_CODE_KEY) || "";
+  });
   const [settings, setSettings] = useState({
     restaurant_name: "",
     logo_path: "",
@@ -47,6 +52,13 @@ const Header = () => {
           return;
         }
 
+        // If already cached in localStorage, skip API call
+        const cached = localStorage.getItem(BUSINESS_CODE_KEY);
+        if (cached) {
+          setBusinessCode(cached);
+          return;
+        }
+
         const { data, error } = await supabase
           .from("businesses")
           .select("code")
@@ -58,7 +70,9 @@ const Header = () => {
           return;
         }
 
-        setBusinessCode(data?.code || "");
+        const code = data?.code || "";
+        setBusinessCode(code);
+        if (code) localStorage.setItem(BUSINESS_CODE_KEY, code);
       } catch {
         setBusinessCode("");
       }
@@ -70,6 +84,7 @@ const Header = () => {
   // ✅ Moved out of useEffect so it's accessible to JSX
   const logoutFunction = () => {
     employeeManager.clearEmployee();
+    localStorage.removeItem(BUSINESS_CODE_KEY);
     navigate("/"); // Back to login
   };
 

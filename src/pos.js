@@ -22,6 +22,7 @@ import { applyMenuStockUpdates } from "./api/stockApi";
 import { getBookedRoomsForDate } from "./api/bookedRoomsApi";
 import { getNextUsin, incrementUsin } from "./api/invoiceNumberApi";
 import { supabase } from "./supabaseClient";
+import { getMenuCache, setMenuCache } from "./utils/menuCache";
 
 const POS = ({ isHotelLayout = false }) => {
   const { employee, loading: authLoading } = useAuth();
@@ -61,6 +62,7 @@ const POS = ({ isHotelLayout = false }) => {
   const [showMenuStockQty, setShowMenuStockQty] = useState(true);
   const [make_invoice_editable, setMakeInvoiceEditable] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreditRecordLoaded, setIsCreditRecordLoaded] = useState(false);
   const [loadedPRAInvoiceNumber, setLoadedPRAInvoiceNumber] = useState(null);
@@ -109,6 +111,9 @@ const POS = ({ isHotelLayout = false }) => {
       const result = await getBookedRoomsForDate({
         businessId: employee.business_id,
         checkInDate,
+        checkOutDate,
+        timeIn,
+        timeOut,
       });
       if (result && result.success) {
         setBookedRoomCodes(result.bookedRooms || []);
@@ -119,15 +124,26 @@ const POS = ({ isHotelLayout = false }) => {
       console.error("Failed to fetch booked rooms:", err);
       setBookedRoomCodes([]);
     }
-  }, [isHotelLayout, lock_booked_room, checkInDate, timeIn, employee?.business_id]);
+  }, [isHotelLayout, lock_booked_room, checkInDate, checkOutDate, timeIn, timeOut, employee?.business_id]);
 
 
   const fetchMenu = useCallback(async () => {
     try {
       if (!employee?.business_id) return;
+
+      // Try cache first
+      const cached = getMenuCache(employee.business_id);
+      if (cached) {
+        setMenuItems(cached.items);
+        setCategories(getCategoriesFromMenuItems(cached.items));
+        return;
+      }
+
+      // Fallback to API
       const data = await listMenuItems(employee.business_id);
       setMenuItems(data);
       setCategories(getCategoriesFromMenuItems(data));
+      setMenuCache(employee.business_id, data);
     } catch (err) {
       console.error("Failed to fetch menu items:", err);
     }
@@ -367,6 +383,7 @@ const POS = ({ isHotelLayout = false }) => {
 
         // Track credit record loaded state for hotel SUBMIT button
         setIsCreditRecordLoaded(true);
+        setIsSaved(true); // Credit invoice is already saved, allow printing
         const praInvNo = data.invoice.InvoiceNumber || data.invoice.pra_invoice_number || null;
         const normalizedPRA = (praInvNo && praInvNo !== invoiceNo && praInvNo !== data.invoice.USIN) ? praInvNo : null;
         setLoadedPRAInvoiceNumber(normalizedPRA);
@@ -533,7 +550,7 @@ const POS = ({ isHotelLayout = false }) => {
       const isRoom = item.itemName.toLowerCase().includes('room');
       return isRoom ? { ...item, quantity: days } : item;
     }));
-  }, [isHotelLayout, checkInDate, checkOutDate, timeIn, fetchBookedRooms]);
+  }, [isHotelLayout, checkInDate, checkOutDate, timeIn, timeOut, fetchBookedRooms]);
 
   const filteredItems = menuItems.filter(
     (item) => categoryFilter === "" || item.itemCategory === categoryFilter
@@ -593,7 +610,7 @@ const POS = ({ isHotelLayout = false }) => {
       setNationality("Pakistan");
       await fetchBookedRooms();
     }
-    document.getElementById("api-message").textContent = "🗒️ Note";
+    document.getElementById("api-message") && (document.getElementById("api-message").textContent = "🗒️ Note");
 
     // 👈 Reset invoice type to "new" (default)
     const newInvoiceRadio = document.querySelector('input[name="invoice-type"][value="new"]');
@@ -603,6 +620,7 @@ const POS = ({ isHotelLayout = false }) => {
     if (creditInvoiceRadio) creditInvoiceRadio.checked = false;
     setIsCreditInvoice(false);
     setIsSaving(false); // 🔓 Re-enable after reset
+    setIsSaved(false); // 🔓 New invoice, not saved yet
     setIsPublishing(false);
     setIsCreditRecordLoaded(false);
     setLoadedPRAInvoiceNumber(null);
@@ -824,6 +842,7 @@ const POS = ({ isHotelLayout = false }) => {
           ? `✅ Invoice ${actionText} successfully. PRA #: ${payload.InvoiceNumber}`
           : `✅ Invoice ${actionText} successfully. Invoice #: ${payload.InvoiceNumber}`;
         document.getElementById("api-message").textContent = successMessage;
+        setIsSaved(true);
 
         // ✅ Increment invoice counter for new invoices (not credit updates)
         if (!isCreditUpdate) {
@@ -1527,6 +1546,10 @@ const POS = ({ isHotelLayout = false }) => {
                       paddingRight: "30px",
                       opacity: isSaving ? 0.5 : 1,
                       cursor: isSaving ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
                     }}
                     onClick={handleSave}
                     disabled={
@@ -1536,7 +1559,22 @@ const POS = ({ isHotelLayout = false }) => {
                       || (isHotelLayout && isCreditInvoice && !!loadedPRAInvoiceNumber)
                     }
                     tabIndex={9}
-                  >{isHotelLayout && isCreditInvoice ? "UPDATE" : "SAVE"}</button>
+                  >
+                    {isSaving && !isSaved && (
+                      <span
+                        style={{
+                          width: "14px",
+                          height: "14px",
+                          border: "2px solid #ffffff80",
+                          borderTop: "2px solid #fff",
+                          borderRadius: "50%",
+                          animation: "spin 0.8s linear infinite",
+                          display: "inline-block",
+                        }}
+                      />
+                    )}
+                    {isSaving && !isSaved ? "SAVING..." : (isHotelLayout && isCreditInvoice ? "UPDATE" : "SAVE")}
+                  </button>
 
                   {isHotelLayout && isCreditInvoice && (
                     <button
@@ -1555,9 +1593,16 @@ const POS = ({ isHotelLayout = false }) => {
                   )}
 
                   <button
-                    className="btn btn-secondary"
-                    style={{ marginRight: "10px", paddingLeft: "30px", paddingRight: "30px" }}
+                    className={`btn ${!isSaved ? "btn-disabled" : "btn-secondary"}`}
+                    style={{
+                      marginRight: "10px",
+                      paddingLeft: "30px",
+                      paddingRight: "30px",
+                      opacity: !isSaved ? 0.5 : 1,
+                      cursor: !isSaved ? "not-allowed" : "pointer",
+                    }}
                     onClick={() => handlePrint(lastPRAInvoice)}
+                    disabled={!isSaved}
                     tabIndex={isHotelLayout && isCreditInvoice ? 11 : 10}
                   >
                     PRINT
