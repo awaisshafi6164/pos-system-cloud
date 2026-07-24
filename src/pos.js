@@ -20,7 +20,7 @@ import { getCategoriesFromMenuItems, listMenuItems } from "./api/menuItemsApi";
 import { lookupInvoiceLegacy, saveInvoiceLegacy, getTotalSalesLegacy } from "./api/invoicesApi";
 import { applyMenuStockUpdates } from "./api/stockApi";
 import { getBookedRoomsForDate } from "./api/bookedRoomsApi";
-import { getNextUsin } from "./api/invoiceNumberApi";
+import { getNextUsin, incrementUsin } from "./api/invoiceNumberApi";
 import { supabase } from "./supabaseClient";
 
 const POS = ({ isHotelLayout = false }) => {
@@ -61,6 +61,9 @@ const POS = ({ isHotelLayout = false }) => {
   const [showMenuStockQty, setShowMenuStockQty] = useState(true);
   const [make_invoice_editable, setMakeInvoiceEditable] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isCreditRecordLoaded, setIsCreditRecordLoaded] = useState(false);
+  const [loadedPRAInvoiceNumber, setLoadedPRAInvoiceNumber] = useState(null);
   const [searchText, setSearchText] = useState("");
   const [isCreditInvoice, setIsCreditInvoice] = useState(false);
   const [originalInvoiceItems, setOriginalInvoiceItems] = useState([]); // Track original quantities for credit invoices
@@ -362,6 +365,13 @@ const POS = ({ isHotelLayout = false }) => {
 
         setIsSaving(false); // 🔓 Re-enable after reset
 
+        // Track credit record loaded state for hotel SUBMIT button
+        setIsCreditRecordLoaded(true);
+        const praInvNo = data.invoice.InvoiceNumber || data.invoice.pra_invoice_number || null;
+        const normalizedPRA = (praInvNo && praInvNo !== invoiceNo && praInvNo !== data.invoice.USIN) ? praInvNo : null;
+        setLoadedPRAInvoiceNumber(normalizedPRA);
+        if (normalizedPRA) setLastPRAInvoice(normalizedPRA);
+
         // Reset flag after state settles
         setTimeout(() => {
           isInvoiceLoading.current = false;
@@ -593,6 +603,9 @@ const POS = ({ isHotelLayout = false }) => {
     if (creditInvoiceRadio) creditInvoiceRadio.checked = false;
     setIsCreditInvoice(false);
     setIsSaving(false); // 🔓 Re-enable after reset
+    setIsPublishing(false);
+    setIsCreditRecordLoaded(false);
+    setLoadedPRAInvoiceNumber(null);
 
     fetchNextUSIN();
     fetchMenu(); // Refresh menu to show updated stock
@@ -737,8 +750,9 @@ const POS = ({ isHotelLayout = false }) => {
         })
       };
 
-      // Conditionally send to PRA ONLY for new invoices (not credit updates)
-      if (pra_linked === "1") {
+      // Hotel layout: SAVE only stores to DB, PRA submission is done via SUBMIT button
+      // Restaurant layout: SAVE sends to PRA for new invoices
+      if (pra_linked === "1" && !isHotelLayout) {
         // Get auth token + business ID to call our Vercel serverless proxy
         const { data: sessionData } = await supabase.auth.getSession();
         const accessToken = sessionData?.session?.access_token;
@@ -810,6 +824,11 @@ const POS = ({ isHotelLayout = false }) => {
           ? `✅ Invoice ${actionText} successfully. PRA #: ${payload.InvoiceNumber}`
           : `✅ Invoice ${actionText} successfully. Invoice #: ${payload.InvoiceNumber}`;
         document.getElementById("api-message").textContent = successMessage;
+
+        // ✅ Increment invoice counter for new invoices (not credit updates)
+        if (!isCreditUpdate) {
+          await incrementUsin();
+        }
 
         // ✅ Smart stock quantity updates
         if (showMenuStockQty) {
@@ -889,6 +908,170 @@ const POS = ({ isHotelLayout = false }) => {
       document.getElementById("api-message").textContent =
         `❌ Network error: ${err.message}`;
       setIsSaving(false); // 🔓 Enable on error
+    }
+  };
+
+  // Hotel layout: Separate SUBMIT button sends credit invoices to PRA
+  const handlePublishToPRA = async () => {
+    setIsPublishing(true);
+
+    try {
+      const settings = await settingsManager.fetchSettings();
+      if (!settings) {
+        document.getElementById("api-message").textContent = "❌ Error: Failed to load settings.";
+        setIsPublishing(false);
+        return;
+      }
+
+      const { pra_posid, pra_token, pra_api_type, pra_linked } = settings;
+
+      if (pra_linked !== "1") {
+        document.getElementById("api-message").textContent = "⚠️ PRA not linked. Please enable PRA in settings.";
+        setIsPublishing(false);
+        return;
+      }
+
+      const getPaymentCode = (mode) => {
+        switch (mode) {
+          case "cash": return 1;
+          case "card": return 2;
+          case "mixed": return 5;
+          case "online": return 6;
+          default: return 1;
+        }
+      };
+
+      const getInvoiceTypeCode = (type) => {
+        switch (type) {
+          case "new": return 1;
+          case "credit": return 3;
+          default: return 1;
+        }
+      };
+
+      const paymentMode = document.querySelector('input[name="payment-mode"]:checked')?.value;
+      const invoiceType = document.querySelector('input[name="invoice-type"]:checked')?.value;
+      const isCreditUpdate = invoiceType === "credit";
+      const actualServiceCharges = parseFloat(document.getElementById("service-charges")?.value || 0);
+      const furtherTaxValue = parseFloat(posCharges || 0) + actualServiceCharges;
+
+      const payload = {
+        InvoiceNumber: "",
+        POSID: parseInt(pra_posid),
+        USIN: document.getElementById("invoice-number").value,
+        RefUSIN: isCreditUpdate ? document.getElementById("invoice-number").value : null,
+        DateTime: currentDateTime.replace("T", " ") + ":00",
+        BuyerName: document.getElementById("customer-name").value || "Walk-in Customer",
+        BuyerPNTN: document.getElementById("pntn").value,
+        BuyerCNIC: document.getElementById("cnic").value,
+        BuyerPhoneNumber: document.getElementById("contact-no").value,
+        TotalSaleValue: parseFloat(itemCost),
+        TotalTaxCharged: parseFloat(gstAmount),
+        Discount: parseFloat(discount) || 0,
+        FurtherTax: furtherTaxValue,
+        TotalBillAmount: parseFloat(totalPayable),
+        TotalQuantity: parseInt(itemCount) + parseInt(foodCount),
+        PaymentMode: paymentMode === "online" ? 1 : getPaymentCode(paymentMode),
+        InvoiceType: getInvoiceTypeCode(invoiceType),
+        Items: selectedMenuItems.map(item => {
+          const rawValue = item.itemPrice * item.quantity;
+          let taxCharged = 0;
+          let totalAmount = rawValue;
+
+          if (gstIncluded) {
+            const base = +(rawValue / (1 + gstPercentage / 100)).toFixed(2);
+            taxCharged = +(rawValue - base).toFixed(2);
+            totalAmount = rawValue;
+          } else {
+            taxCharged = +(rawValue * (gstPercentage / 100)).toFixed(2);
+            totalAmount = rawValue + taxCharged;
+          }
+
+          return {
+            ItemCode: item.itemCode,
+            ItemName: item.itemName,
+            PCTCode: "01011000",
+            Quantity: item.quantity,
+            TaxRate: gstPercentage,
+            SaleValue: item.itemPrice * item.quantity,
+            Discount: 0.0,
+            FurtherTax: 0.0,
+            TaxCharged: taxCharged,
+            TotalAmount: totalAmount,
+            InvoiceType: getInvoiceTypeCode(invoiceType),
+            RefUSIN: isCreditUpdate ? document.getElementById("invoice-number").value : null,
+          };
+        })
+      };
+
+      // Get auth token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        document.getElementById("api-message").textContent = "❌ Error: Not authenticated.";
+        setIsPublishing(false);
+        return;
+      }
+
+      console.log(`📤 SUBMIT to PRA via proxy (${pra_api_type})...`);
+      const praResponse = await fetch("/api/pra/post-invoice", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+          "X-Business-Id": employee.business_id,
+        },
+        body: JSON.stringify({
+          invoiceData: payload,
+          praToken: pra_token,
+          environment: pra_api_type,
+        }),
+      });
+
+      const praResult = await praResponse.json();
+      console.log("✅ PRA SUBMIT Response:", praResult);
+
+      if (praResult.Code !== "100") {
+        document.getElementById("api-message").textContent = "❌ PRA Error: " + (praResult.Response || praResult.error || "Unknown error");
+        setIsPublishing(false);
+        return;
+      }
+
+      payload.InvoiceNumber = praResult.InvoiceNumber;
+      setLastPRAInvoice(praResult.InvoiceNumber);
+      setLoadedPRAInvoiceNumber(praResult.InvoiceNumber);
+
+      // Update local DB with PRA invoice number
+      const localPayload = {
+        ...payload,
+        address: document.getElementById("address").value || "",
+        POS_Charges: parseFloat(posCharges || 0),
+        Service_Charges: actualServiceCharges,
+        Balance: parseFloat(balance || 0),
+        Paid: parseFloat(paid || 0),
+        PaymentMode: getPaymentCode(paymentMode),
+        checkInDate,
+        checkOutDate,
+        timeIn,
+        timeOut,
+        emergencyContact,
+        nationality,
+      };
+
+      await saveInvoiceLegacy({
+        businessId: employee?.business_id,
+        payload: localPayload,
+        isCreditUpdate: true,
+      });
+
+      document.getElementById("api-message").textContent =
+        `✅ Submitted to PRA successfully. PRA #: ${praResult.InvoiceNumber}`;
+
+    } catch (err) {
+      console.error("❌ Publish error:", err);
+      document.getElementById("api-message").textContent = `❌ Network error: ${err.message}`;
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -1346,15 +1529,36 @@ const POS = ({ isHotelLayout = false }) => {
                       cursor: isSaving ? "not-allowed" : "pointer",
                     }}
                     onClick={handleSave}
-                    disabled={isSaving}
+                    disabled={
+                      isSaving
+                      || isPublishing
+                      || (isHotelLayout && isCreditInvoice && !isCreditRecordLoaded)
+                      || (isHotelLayout && isCreditInvoice && !!loadedPRAInvoiceNumber)
+                    }
                     tabIndex={9}
-                  >SAVE</button>
+                  >{isHotelLayout && isCreditInvoice ? "UPDATE" : "SAVE"}</button>
+
+                  {isHotelLayout && isCreditInvoice && (
+                    <button
+                      className={`btn ${isPublishing ? "btn-disabled" : "btn-primary"}`}
+                      style={{
+                        marginRight: "10px",
+                        paddingLeft: "30px",
+                        paddingRight: "30px",
+                        opacity: isPublishing ? 0.5 : 1,
+                        cursor: isPublishing ? "not-allowed" : "pointer",
+                      }}
+                      onClick={handlePublishToPRA}
+                      disabled={isSaving || isPublishing || !isCreditRecordLoaded || !!loadedPRAInvoiceNumber}
+                      tabIndex={10}
+                    >SUBMIT</button>
+                  )}
 
                   <button
                     className="btn btn-secondary"
                     style={{ marginRight: "10px", paddingLeft: "30px", paddingRight: "30px" }}
-                    onClick={() => handlePrint(lastPRAInvoice)} // ✅ FIXED
-                    tabIndex={10}
+                    onClick={() => handlePrint(lastPRAInvoice)}
+                    tabIndex={isHotelLayout && isCreditInvoice ? 11 : 10}
                   >
                     PRINT
                   </button>

@@ -22,3 +22,21 @@ export const getNextUsin = async () => {
   const paddedNum = String(next_number).padStart(pad || 1, "0");
   return `${prefix || ""}${paddedNum}`;
 };
+
+export const incrementUsin = async () => {
+  const businessId = employeeManager.getField("business_id");
+  if (!businessId) return;
+
+  const { data, error } = await supabase
+    .from("invoice_counters")
+    .select("next_number")
+    .eq("business_id", businessId)
+    .maybeSingle();
+
+  if (error || !data) return;
+
+  await supabase
+    .from("invoice_counters")
+    .update({ next_number: data.next_number + 1, updated_at: new Date().toISOString() })
+    .eq("business_id", businessId);
+};
