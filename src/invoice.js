@@ -6,7 +6,7 @@ import Header from "./components/header";
 import Sidebar from "./components/sidebar";
 import SalesReportSection from "./components/SalesReportSection";
 import { useAuth } from "./context/AuthContext";
-import { deleteInvoiceById, listInvoicesLegacy } from "./api/invoicesApi";
+import { deleteInvoicesByIds, listInvoicesLegacy } from "./api/invoicesApi";
 import {
   Table,
   TableBody,
@@ -15,6 +15,8 @@ import {
   TableHead,
   TableRow,
   Paper,
+  Checkbox,
+  Tooltip,
 } from "@mui/material";
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -85,25 +87,35 @@ function Invoice() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [gstIncluded, setGstIncluded] = useState(false);
   const [praLinked, setPraLinked] = useState(false);
+  // Multi-select for bulk delete
+  const [selectedIds, setSelectedIds] = useState([]);
 
   useEffect(() => {
     const fetchInvoices = async () => {
       try {
         if (authLoading) return;
         if (!employee?.business_id) return;
+        if (!fromDate || !toDate) return;
         const data = await listInvoicesLegacy({
           businessId: employee.business_id,
+          fromDate,
+          toDate,
         });
 
         if (!Array.isArray(data) || data.length === 0) {
-          setFetchError("❌ No invoices found in the database.");
+          setFetchError("❌ No invoices found in the selected date range.");
           setInvoices([]);
+          setFilteredInvoices([]);
           return;
         }
 
         setInvoices(data);
-        setFilteredInvoices(data); // ✅ keep this list separate for filtering
-        setFetchError(""); // clear any previous errors
+        setFilteredInvoices(data);
+        setFetchError("");
+        // Clear selection when date range changes
+        setSelectedIds([]);
+        setSelectedInvoiceId(null);
+        setSelectedInvoiceItems([]);
       } catch (err) {
         setFetchError("❌ Failed to fetch invoices: " + err.message);
       }
@@ -125,20 +137,7 @@ function Invoice() {
       }
     };
     loadSettings();
-  }, [authLoading, employee?.business_id]);
-
-  // Auto-filter when dates change
-  useEffect(() => {
-    if (fromDate && toDate && invoices.length > 0) {
-      const from = new Date(fromDate + ' 00:00:00');
-      const to = new Date(toDate + ' 23:59:59');
-      const filtered = invoices.filter((inv) => {
-        const invoiceDate = new Date(inv.DateTime);
-        return invoiceDate >= from && invoiceDate <= to;
-      });
-      setFilteredInvoices(filtered);
-    }
-  }, [fromDate, toDate, invoices]);
+  }, [authLoading, employee?.business_id, fromDate, toDate]);
 
   const handleRowClick = (invoice) => {
     setSelectedInvoiceId(invoice.id);
@@ -237,32 +236,58 @@ function Invoice() {
   // Inside the Invoice component:
   const navigate = useNavigate();
 
-  const handleDelete = async () => {
-    if (!selectedInvoiceId) {
-      toast.warn("Please select an invoice to delete.");
-      return;
-    }
+  // The list actually rendered in the table (date-filtered + search-filtered), newest first
+  const visibleInvoices = filteredInvoices
+    .filter((inv) => {
+      if (!searchText) return true;
+      return INVOICE_COLUMNS_TO_DISPLAY.some(col =>
+        String(inv[col.key] || '').toLowerCase().includes(searchText)
+      ) || String(inv.BuyerCNIC || '').toLowerCase().includes(searchText);
+    })
+    .sort((a, b) => {
+      const dateDiff = new Date(b.DateTime) - new Date(a.DateTime);
+      if (dateDiff !== 0) return dateDiff;
+      return (b.id ?? 0) - (a.id ?? 0); // tie-break by id descending
+    });
 
-    if (!window.confirm("Are you sure you want to delete this invoice? This action cannot be undone.")) {
+  // Multi-select helpers
+  const handleToggleSelect = (e, id) => {
+    e.stopPropagation(); // don't trigger row click / item view
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = (e) => {
+    e.stopPropagation();
+    if (selectedIds.length === visibleInvoices.length && visibleInvoices.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(visibleInvoices.map(inv => inv.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      toast.warn("Select at least one invoice to delete.");
       return;
     }
+    if (!window.confirm(`Delete ${selectedIds.length} invoice(s)? This cannot be undone.`)) return;
 
     try {
-      const result = await deleteInvoiceById({
-        businessId: employee?.business_id,
-        invoiceId: selectedInvoiceId,
-      });
-      if (result.success) {
-        toast.success("Invoice deleted successfully!");
-        setInvoices(invoices.filter(inv => inv.id !== selectedInvoiceId));
-        setFilteredInvoices(filteredInvoices.filter(inv => inv.id !== selectedInvoiceId));
+      await deleteInvoicesByIds({ businessId: employee?.business_id, invoiceIds: selectedIds });
+      toast.success(`${selectedIds.length} invoice(s) deleted!`);
+      const remaining = invoices.filter(inv => !selectedIds.includes(inv.id));
+      setInvoices(remaining);
+      setFilteredInvoices(remaining);
+      // Clear selection + item panel if the viewed invoice was deleted
+      if (selectedIds.includes(selectedInvoiceId)) {
         setSelectedInvoiceId(null);
         setSelectedInvoiceItems([]);
-      } else {
-        toast.error(result.message || "Failed to delete invoice");
       }
+      setSelectedIds([]);
     } catch (error) {
-      toast.error("Error deleting invoice: " + error.message);
+      toast.error("Error deleting invoices: " + error.message);
     }
   };
 
@@ -538,25 +563,32 @@ function Invoice() {
 
             {/* Header with Action Buttons */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-              <h2 style={{ margin: 0 }}>All Invoices</h2>
-              {selectedInvoiceId && (
-                <div style={{ display: "flex", gap: "10px" }}>
+              <h2 style={{ margin: 0 }}>
+                All Invoices
+                {selectedIds.length > 0 && (
+                  <span style={{ fontSize: "14px", fontWeight: 400, color: "#666", marginLeft: "12px" }}>
+                    {selectedIds.length} selected
+                  </span>
+                )}
+              </h2>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                {selectedInvoiceId && (
                   <button
                     style={{ padding: "8px 16px", backgroundColor: "#1976d2", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
                     onClick={handlePrint}
                   >
                     🖨️ Print Receipt
                   </button>
-                  {!praLinked && (
-                    <button
-                      style={{ padding: "8px 16px", backgroundColor: "#d32f2f", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
-                      onClick={handleDelete}
-                    >
-                      🗑️ Delete Invoice
-                    </button>
-                  )}
-                </div>
-              )}
+                )}
+                {!praLinked && selectedIds.length > 0 && (
+                  <button
+                    style={{ padding: "8px 16px", backgroundColor: "#d32f2f", color: "white", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
+                    onClick={handleBulkDelete}
+                  >
+                    🗑️ Delete ({selectedIds.length})
+                  </button>
+                )}
+              </div>
             </div>
             {fetchError && <p style={{ color: "red", marginBottom: "10px" }}>{fetchError}</p>}
             <TableContainer component={Paper}
@@ -568,26 +600,52 @@ function Invoice() {
                 <TableHead>
                   {invoices.length > 0 && (
                     <TableRow sx={{ height: "28px" }}>
+                      {!praLinked && (
+                        <TableCell
+                          padding="checkbox"
+                          sx={{ border: "1px solid #ccc", backgroundColor: "#f5f5f5", padding: "0 4px", width: "40px" }}
+                        >
+                          <Tooltip title={selectedIds.length === visibleInvoices.length && visibleInvoices.length > 0 ? "Deselect all" : "Select all"}>
+                            <Checkbox
+                              size="small"
+                              indeterminate={selectedIds.length > 0 && selectedIds.length < visibleInvoices.length}
+                              checked={visibleInvoices.length > 0 && selectedIds.length === visibleInvoices.length}
+                              onChange={handleSelectAll}
+                            />
+                          </Tooltip>
+                        </TableCell>
+                      )}
                       {renderTableHeader()}
                     </TableRow>
                   )}
                 </TableHead>
                 <TableBody>
-                  {filteredInvoices
-                    .filter((inv) => {
-                      if (!searchText) return true;
-                      return INVOICE_COLUMNS_TO_DISPLAY.some(col =>
-                        String(inv[col.key] || '').toLowerCase().includes(searchText)
-                      ) || String(inv.BuyerCNIC || '').toLowerCase().includes(searchText);
-                    })
+                  {visibleInvoices
                     .map((inv) => (
                       <TableRow
                         key={inv.id}
                         hover
                         selected={inv.id === selectedInvoiceId}
                         onClick={() => handleRowClick(inv)}
-                        sx={{ cursor: "pointer", height: "28px" }}
+                        sx={{
+                          cursor: "pointer",
+                          height: "28px",
+                          ...(selectedIds.includes(inv.id) && { backgroundColor: "rgba(25,118,210,0.08)" }),
+                        }}
                       >
+                        {!praLinked && (
+                          <TableCell
+                            padding="checkbox"
+                            sx={{ border: "1px solid #ddd", padding: "0 4px", width: "40px" }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Checkbox
+                              size="small"
+                              checked={selectedIds.includes(inv.id)}
+                              onChange={(e) => handleToggleSelect(e, inv.id)}
+                            />
+                          </TableCell>
+                        )}
                         {renderTableRow(inv)}
                       </TableRow>
                     ))}

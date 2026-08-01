@@ -51,6 +51,46 @@
   background-color: #1D4ED8;
 }
 
+.settings-content .btn-primary:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.settings-content .btn-primary.btn-saved {
+  background-color: #16a34a;
+}
+
+.settings-content .btn-primary.btn-saved:hover {
+  background-color: #15803d;
+}
+
+.settings-content .btn-spinner-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-content .btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+.settings-content .btn-check {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
 .settings-content .btn-ghost {
   background-color: transparent;
   color: #374151;

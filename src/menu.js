@@ -24,21 +24,26 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  TableSortLabel,
+  Checkbox
 } from "@mui/material";
 import {
   Edit,
   Delete,
   Search,
   FilterList,
-  Sync
+  Sync,
+  DeleteSweep
 } from "@mui/icons-material";
 import settingsManager from "./utils/SettingsManager";
 import { useAuth } from "./context/AuthContext";
 import {
   createMenuItem,
   deleteMenuItem,
+  deleteMenuItems,
   getCategoriesFromMenuItems,
+  getNextItemCode,
   listMenuItems,
   updateMenuItem,
 } from "./api/menuItemsApi";
@@ -59,6 +64,11 @@ function Menu() {
   });
   const [busy, setBusy] = useState(false);
   const [lastSynced, setLastSynced] = useState(null);
+  // Multi-select state
+  const [selectedIds, setSelectedIds] = useState([]);
+  // Sorting state
+  const [sortField, setSortField] = useState("itemName");
+  const [sortDir, setSortDir] = useState("asc");
   
   // Load menu from cache or API
   const loadmenu = useCallback(async (forceSync = false) => {
@@ -71,6 +81,7 @@ function Menu() {
         setmenu(cached.items);
         setCategories(getCategoriesFromMenuItems(cached.items));
         setLastSynced(cached.lastSynced);
+        setSelectedIds([]);
         return;
       }
     }
@@ -81,6 +92,7 @@ function Menu() {
     setCategories(getCategoriesFromMenuItems(data));
     setMenuCache(employee.business_id, data);
     setLastSynced(new Date().toISOString());
+    setSelectedIds([]);
   }, [employee?.business_id]);
 
   // Sync button handler
@@ -107,7 +119,15 @@ function Menu() {
       setmenu(updatedMenu);
       setCategories(getCategoriesFromMenuItems(updatedMenu));
       setMenuCache(employee.business_id, updatedMenu);
-      setForm({ itemCode: "", itemName: "", itemCategory: "", itemPrice: "", stockQty: "" });
+      // Keep category, auto-increment item code for fast additions
+      const nextCode = getNextItemCode(updatedMenu);
+      setForm(prev => ({
+        itemCode: nextCode,
+        itemName: "",
+        itemCategory: prev.itemCategory, // preserve last used category
+        itemPrice: "",
+        stockQty: ""
+      }));
     } catch (err) {
       toast.error(err?.message || "Failed to add menu item");
     } finally {
@@ -133,6 +153,21 @@ function Menu() {
     if (!employee?.business_id) return;
     loadmenu().catch((err) => toast.error(err?.message || "Failed to load menu"));
   }, [authLoading, employee?.business_id, loadmenu]);
+
+  // Once menu is loaded (and not editing), seed item code with next auto-increment value
+  useEffect(() => {
+    if (!isEditing && menu.length >= 0) {
+      const nextCode = getNextItemCode(menu);
+      setForm(prev => {
+        // Only update if itemCode hasn't been manually typed
+        if (prev.itemCode === "" || /^\d+$/.test(prev.itemCode)) {
+          return { ...prev, itemCode: nextCode };
+        }
+        return prev;
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menu.length, isEditing]);
   
   const handleEdit = (menu) => {
     setForm({
@@ -190,14 +225,72 @@ function Menu() {
     setEditingId(null);
   };
 
-	  const filteredMenu = menu.filter((mu) => {
-	    const matchesCategory = categoryFilter === "" || mu.itemCategory === categoryFilter;
-	    const itemName = String(mu?.itemName || "").toLowerCase();
-	    const itemCategory = String(mu?.itemCategory || "").toLowerCase();
-	    const itemCode = String(mu?.itemCode || "").toLowerCase();
-	    const matchesSearch = itemName.includes(searchText) || itemCategory.includes(searchText) || itemCode.includes(searchText);
-	    return matchesCategory && matchesSearch;
-	  });
+  // Multi-select handlers
+  const handleSelectRow = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredMenu.length && filteredMenu.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredMenu.map(m => m.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected item(s)? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      await deleteMenuItems(selectedIds, employee.business_id);
+      toast.success(`${selectedIds.length} item(s) deleted!`);
+      const updatedMenu = menu.filter(m => !selectedIds.includes(m.id));
+      setmenu(updatedMenu);
+      setCategories(getCategoriesFromMenuItems(updatedMenu));
+      setMenuCache(employee.business_id, updatedMenu);
+      setSelectedIds([]);
+    } catch (err) {
+      toast.error(err?.message || "Failed to delete selected items");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+	  const filteredMenu = (() => {
+	    const filtered = menu.filter((mu) => {
+	      const matchesCategory = categoryFilter === "" || mu.itemCategory === categoryFilter;
+	      const itemName = String(mu?.itemName || "").toLowerCase();
+	      const itemCategory = String(mu?.itemCategory || "").toLowerCase();
+	      const itemCode = String(mu?.itemCode || "").toLowerCase();
+	      const matchesSearch = itemName.includes(searchText) || itemCategory.includes(searchText) || itemCode.includes(searchText);
+	      return matchesCategory && matchesSearch;
+	    });
+	    return [...filtered].sort((a, b) => {
+	      const aVal = String(a[sortField] || "").toLowerCase();
+	      const bVal = String(b[sortField] || "").toLowerCase();
+	      if (sortField === "itemCode") {
+	        const aNum = parseFloat(aVal);
+	        const bNum = parseFloat(bVal);
+	        if (!isNaN(aNum) && !isNaN(bNum)) {
+	          return sortDir === "asc" ? aNum - bNum : bNum - aNum;
+	        }
+	      }
+	      const cmp = aVal.localeCompare(bVal);
+	      return sortDir === "asc" ? cmp : -cmp;
+	    });
+	  })();
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
 
   const getCategoryColor = (category) => {
     const colors = ['primary', 'secondary', 'success', 'error', 'warning', 'info'];
@@ -328,17 +421,31 @@ function Menu() {
                             {lastSynced && ` • Last synced: ${new Date(lastSynced).toLocaleString()}`}
                           </Typography>
                         </Box>
-                        <Tooltip title="Sync menu from server">
-                          <Button
-                            variant="outlined"
-                            startIcon={<Sync />}
-                            onClick={handleSync}
-                            disabled={busy}
-                            size="small"
-                          >
-                            Sync
-                          </Button>
-                        </Tooltip>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                          {selectedIds.length > 0 && (
+                            <Button
+                              variant="contained"
+                              color="error"
+                              startIcon={<DeleteSweep />}
+                              onClick={handleBulkDelete}
+                              disabled={busy}
+                              size="small"
+                            >
+                              Delete Selected ({selectedIds.length})
+                            </Button>
+                          )}
+                          <Tooltip title="Sync menu from server">
+                            <Button
+                              variant="outlined"
+                              startIcon={<Sync />}
+                              onClick={handleSync}
+                              disabled={busy}
+                              size="small"
+                            >
+                              Sync
+                            </Button>
+                          </Tooltip>
+                        </Box>
                       </Box>
                       
                       <Grid container spacing={2} sx={{ mb: 3 }}>
@@ -384,9 +491,43 @@ function Menu() {
                         <Table>
                           <TableHead>
                             <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                              <TableCell sx={{ fontWeight: 'bold' }}>Code</TableCell>
-                              <TableCell sx={{ fontWeight: 'bold' }}>Item Name</TableCell>
-                              <TableCell sx={{ fontWeight: 'bold' }}>Category</TableCell>
+                              <TableCell padding="checkbox">
+                                <Tooltip title={selectedIds.length === filteredMenu.length && filteredMenu.length > 0 ? "Deselect all" : "Select all"}>
+                                  <Checkbox
+                                    indeterminate={selectedIds.length > 0 && selectedIds.length < filteredMenu.length}
+                                    checked={filteredMenu.length > 0 && selectedIds.length === filteredMenu.length}
+                                    onChange={handleSelectAll}
+                                    size="small"
+                                  />
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 'bold' }}>
+                                <TableSortLabel
+                                  active={sortField === "itemCode"}
+                                  direction={sortField === "itemCode" ? sortDir : "asc"}
+                                  onClick={() => handleSort("itemCode")}
+                                >
+                                  Code
+                                </TableSortLabel>
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 'bold' }}>
+                                <TableSortLabel
+                                  active={sortField === "itemName"}
+                                  direction={sortField === "itemName" ? sortDir : "asc"}
+                                  onClick={() => handleSort("itemName")}
+                                >
+                                  Item Name
+                                </TableSortLabel>
+                              </TableCell>
+                              <TableCell sx={{ fontWeight: 'bold' }}>
+                                <TableSortLabel
+                                  active={sortField === "itemCategory"}
+                                  direction={sortField === "itemCategory" ? sortDir : "asc"}
+                                  onClick={() => handleSort("itemCategory")}
+                                >
+                                  Category
+                                </TableSortLabel>
+                              </TableCell>
                               <TableCell sx={{ fontWeight: 'bold' }}>Price</TableCell>
                               {showStockQty && <TableCell sx={{ fontWeight: 'bold' }}>Stock</TableCell>}
                               {showModifiedDate && <TableCell sx={{ fontWeight: 'bold' }}>Modified</TableCell>}
@@ -403,8 +544,19 @@ function Menu() {
                                   animate={{ opacity: 1 }}
                                   exit={{ opacity: 0 }}
                                   transition={{ delay: index * 0.05 }}
-                                  sx={{ '&:hover': { bgcolor: 'action.hover' } }}
+                                  selected={selectedIds.includes(mu.id)}
+                                  sx={{
+                                    '&:hover': { bgcolor: 'action.hover' },
+                                    ...(selectedIds.includes(mu.id) && { bgcolor: 'action.selected' })
+                                  }}
                                 >
+                                  <TableCell padding="checkbox">
+                                    <Checkbox
+                                      size="small"
+                                      checked={selectedIds.includes(mu.id)}
+                                      onChange={() => handleSelectRow(mu.id)}
+                                    />
+                                  </TableCell>
                                   <TableCell>{mu.itemCode}</TableCell>
                                   <TableCell>
                                     <Typography variant="body1" sx={{ fontWeight: 600 }}>

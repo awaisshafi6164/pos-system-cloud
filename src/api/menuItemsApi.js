@@ -69,6 +69,41 @@ export const deleteMenuItem = async (id, businessId) => {
   return { success: true };
 };
 
+export const deleteMenuItems = async (ids, businessId) => {
+  if (!ids || ids.length === 0) return { success: true };
+  const { error } = await supabase
+    .from("menu")
+    .delete()
+    .in("id", ids)
+    .eq("business_id", businessId);
+  if (error) throw new Error(error.message);
+  return { success: true };
+};
+
+/**
+ * Derives the next auto-increment item code from existing items.
+ * Finds the highest numeric suffix among all item codes and returns
+ * that number + 1, zero-padded to match the same width (e.g. "007" → "008").
+ * If no numeric codes exist, returns "001".
+ */
+export const getNextItemCode = (items) => {
+  let maxNum = 0;
+  let padLen = 3;
+
+  (items || []).forEach((item) => {
+    const code = String(item?.itemCode || "").trim();
+    if (/^\d+$/.test(code)) {
+      const n = parseInt(code, 10);
+      if (n > maxNum) {
+        maxNum = n;
+        padLen = Math.max(padLen, code.length);
+      }
+    }
+  });
+
+  return String(maxNum + 1).padStart(padLen, "0");
+};
+
 export const getCategoriesFromMenuItems = (items) => {
   const set = new Set();
   (items || []).forEach((item) => {

@@ -10,6 +10,8 @@ import { upsertBusinessSettings } from "./api/settingsApi";
 
 const Settings = () => {
   const { employee, loading: authLoading } = useAuth();
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [form, setForm] = useState({
     restaurant_name: "",
     restaurant_address: "",
@@ -73,12 +75,18 @@ const Settings = () => {
       return;
     }
 
+    setSaving(true);
+    setSaved(false);
     try {
       await upsertBusinessSettings(employee.business_id, updatedForm);
       toast.success("Settings updated successfully!");
       settingsManager.setSettings(updatedForm);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       toast.error("Error: " + (err?.message || "Failed to save settings"));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -110,7 +118,25 @@ const Settings = () => {
             </div>
             <div className="header-actions">
               <button className="btn-ghost" onClick={() => window.location.reload()}>Discard Changes</button>
-              <button className="btn-primary" onClick={handleSave}>Save Settings</button>
+              <button
+                className={`btn-primary${saved ? " btn-saved" : ""}`}
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? (
+                  <span className="btn-spinner-wrap">
+                    <span className="btn-spinner" />
+                    Saving…
+                  </span>
+                ) : saved ? (
+                  <span className="btn-spinner-wrap">
+                    <span className="btn-check">✓</span>
+                    Saved!
+                  </span>
+                ) : (
+                  "Save Settings"
+                )}
+              </button>
             </div>
           </div>
 

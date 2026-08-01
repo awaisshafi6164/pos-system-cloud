@@ -214,7 +214,8 @@ export const listInvoicesLegacy = async ({ businessId, fromDate, toDate }) => {
       "id, business_id, usin, pra_invoice_number, ref_usin, datetime, buyer_name, buyer_pntn, buyer_cnic, buyer_phone, address, total_sale_value, total_tax_charged, discount, further_tax, total_bill_amount, total_quantity, payment_mode, invoice_type, pos_charges, service_charges, balance, paid, check_in_date, check_out_date, time_in, time_out, emergency_contact, nationality, invoice_items(item_code, item_name, quantity, sale_value, tax_rate, tax_charged, total_amount)"
     )
     .eq("business_id", businessId)
-    .order("datetime", { ascending: false });
+    .order("datetime", { ascending: false })
+    .order("id", { ascending: false });
 
   if (fromDate) query = query.gte("datetime", startOfDayIso(fromDate));
   if (toDate) query = query.lte("datetime", endOfDayIso(toDate));
@@ -244,6 +245,20 @@ export const deleteInvoiceById = async ({ businessId, invoiceId }) => {
     .from("invoices")
     .delete()
     .eq("id", invoiceId)
+    .eq("business_id", businessId);
+
+  if (error) throw new Error(error.message);
+  return { success: true };
+};
+
+export const deleteInvoicesByIds = async ({ businessId, invoiceIds }) => {
+  if (!businessId) throw new Error("Missing businessId");
+  if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) throw new Error("No invoice IDs provided");
+
+  const { error } = await supabase
+    .from("invoices")
+    .delete()
+    .in("id", invoiceIds)
     .eq("business_id", businessId);
 
   if (error) throw new Error(error.message);
