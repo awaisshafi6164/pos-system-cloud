@@ -211,11 +211,13 @@ export const listInvoicesLegacy = async ({ businessId, fromDate, toDate }) => {
   let query = supabase
     .from("invoices")
     .select(
-      "id, business_id, usin, pra_invoice_number, ref_usin, datetime, buyer_name, buyer_pntn, buyer_cnic, buyer_phone, address, total_sale_value, total_tax_charged, discount, further_tax, total_bill_amount, total_quantity, payment_mode, invoice_type, pos_charges, service_charges, balance, paid, check_in_date, check_out_date, time_in, time_out, emergency_contact, nationality, invoice_items(item_code, item_name, quantity, sale_value, tax_rate, tax_charged, total_amount)"
+      "id, business_id, usin, pra_invoice_number, ref_usin, datetime, buyer_name, buyer_pntn, buyer_cnic, buyer_phone, address, total_sale_value, total_tax_charged, discount, further_tax, total_bill_amount, total_quantity, payment_mode, invoice_type, pos_charges, service_charges, balance, paid, check_in_date, check_out_date, time_in, time_out, emergency_contact, nationality, invoice_items(item_code, item_name, quantity, sale_value, tax_rate, tax_charged, total_amount)",
+      { count: "exact" }
     )
     .eq("business_id", businessId)
     .order("datetime", { ascending: false })
-    .order("id", { ascending: false });
+    .order("id", { ascending: false })
+    .limit(5000); // explicit high limit — prevents PostgREST default 1000 row cap
 
   if (fromDate) query = query.gte("datetime", startOfDayIso(fromDate));
   if (toDate) query = query.lte("datetime", endOfDayIso(toDate));

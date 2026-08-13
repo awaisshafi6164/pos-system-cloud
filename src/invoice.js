@@ -17,6 +17,7 @@ import {
   Paper,
   Checkbox,
   Tooltip,
+  TableSortLabel,
 } from "@mui/material";
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -89,6 +90,8 @@ function Invoice() {
   const [praLinked, setPraLinked] = useState(false);
   // Multi-select for bulk delete
   const [selectedIds, setSelectedIds] = useState([]);
+  // Column sort for the invoices table (default: USIN/Invoice No desc)
+  const [invoiceSort, setInvoiceSort] = useState({ key: "USIN", dir: "desc" });
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -170,6 +173,14 @@ function Invoice() {
     return cols;
   };
 
+  const handleInvoiceSort = (key) => {
+    setInvoiceSort(prev =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" }
+    );
+  };
+
   const renderTableHeader = () => {
     return getColumns().map((col) => (
       <TableCell
@@ -180,9 +191,19 @@ function Invoice() {
           backgroundColor: "#f5f5f5",
           fontSize: "12px",
           padding: "4px 8px",
+          whiteSpace: "nowrap",
+          cursor: "pointer",
+          userSelect: "none",
         }}
       >
-        {col.header}
+        <TableSortLabel
+          active={invoiceSort.key === col.key}
+          direction={invoiceSort.key === col.key ? invoiceSort.dir : "asc"}
+          onClick={() => handleInvoiceSort(col.key)}
+          sx={{ fontSize: "12px", fontWeight: "bold" }}
+        >
+          {col.header}
+        </TableSortLabel>
       </TableCell>
     ));
   };
@@ -236,7 +257,7 @@ function Invoice() {
   // Inside the Invoice component:
   const navigate = useNavigate();
 
-  // The list actually rendered in the table (date-filtered + search-filtered), newest first
+  // The list actually rendered in the table (date-filtered + search-filtered)
   const visibleInvoices = filteredInvoices
     .filter((inv) => {
       if (!searchText) return true;
@@ -245,9 +266,31 @@ function Invoice() {
       ) || String(inv.BuyerCNIC || '').toLowerCase().includes(searchText);
     })
     .sort((a, b) => {
-      const dateDiff = new Date(b.DateTime) - new Date(a.DateTime);
-      if (dateDiff !== 0) return dateDiff;
-      return (b.id ?? 0) - (a.id ?? 0); // tie-break by id descending
+      const { key, dir } = invoiceSort;
+      const aVal = a[key];
+      const bVal = b[key];
+
+      // Numeric columns
+      const numericKeys = ["TotalBillAmount", "TotalQuantity", "TotalSaleValue", "TotalTaxCharged", "Discount", "FurtherTax", "Balance", "Paid"];
+      if (numericKeys.includes(key)) {
+        const diff = Number(aVal || 0) - Number(bVal || 0);
+        return dir === "asc" ? diff : -diff;
+      }
+      // Invoice No (USIN) — sort by trailing numeric part so 1134 > 999
+      if (key === "USIN") {
+        const getNum = (v) => { const m = String(v || "").match(/(\d+)$/); return m ? parseInt(m[1], 10) : 0; };
+        const diff = getNum(aVal) - getNum(bVal);
+        return dir === "asc" ? diff : -diff;
+      }
+      // Date column
+      if (key === "DateTime") {
+        const diff = new Date(aVal) - new Date(bVal);
+        if (diff !== 0) return dir === "asc" ? diff : -diff;
+        return dir === "asc" ? (a.id ?? 0) - (b.id ?? 0) : (b.id ?? 0) - (a.id ?? 0);
+      }
+      // String columns
+      const cmp = String(aVal ?? "").localeCompare(String(bVal ?? ""));
+      return dir === "asc" ? cmp : -cmp;
     });
 
   // Multi-select helpers
@@ -565,6 +608,9 @@ function Invoice() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
               <h2 style={{ margin: 0 }}>
                 All Invoices
+                <span style={{ fontSize: "14px", fontWeight: 400, color: "#888", marginLeft: "10px" }}>
+                  ({visibleInvoices.length} records)
+                </span>
                 {selectedIds.length > 0 && (
                   <span style={{ fontSize: "14px", fontWeight: 400, color: "#666", marginLeft: "12px" }}>
                     {selectedIds.length} selected
