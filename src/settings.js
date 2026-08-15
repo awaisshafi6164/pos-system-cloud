@@ -7,6 +7,7 @@ import settingsManager from "./utils/SettingsManager"; // ✅ import SettingsMan
 import { ToastContainer, toast } from "react-toastify";
 import { useAuth } from "./context/AuthContext";
 import { upsertBusinessSettings } from "./api/settingsApi";
+import { supabase } from "./supabaseClient";
 
 const Settings = () => {
   const { employee, loading: authLoading } = useAuth();
@@ -90,15 +91,42 @@ const Settings = () => {
     }
   };
 
-  // ✅ Handle file upload (optional logo logic)
-  const handleLogoChange = (e) => {
+  // ✅ #14 — Upload logo to Supabase Storage instead of storing base64 in the DB.
+  // Eliminates XSS risk from SVG injection and removes ~267KB bloat per settings fetch.
+  const handleLogoChange = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setForm({ ...form, logo_path: reader.result });
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Invalid file type. Only PNG, JPG, WebP or GIF allowed.");
+      return;
+    }
+
+    // Validate file size (max 2 MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 2 MB.");
+      return;
+    }
+
+    try {
+      const filePath = `${employee.business_id}/logo.${file.name.split(".").pop()}`;
+      const { error: uploadError } = await supabase.storage
+        .from("logos")
+        .upload(filePath, file, { upsert: true, contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("logos").getPublicUrl(filePath);
+      const publicUrl = urlData?.publicUrl;
+
+      if (!publicUrl) throw new Error("Failed to get public URL after upload.");
+
+      setForm({ ...form, logo_path: publicUrl });
+      toast.success("Logo uploaded successfully!");
+    } catch (err) {
+      toast.error("Logo upload failed: " + (err?.message || "Unknown error"));
     }
   };
 

@@ -1,10 +1,16 @@
-const { getRequester, requireAdminRole, parseJsonBody, json } = require("../_utils/supabaseAdmin");
+const { getRequester, requireAdminRole, parseJsonBody, setCorsHeaders, checkRateLimit, json } = require("../_utils/supabaseAdmin");
 
 module.exports = async function handler(req, res) {
+  setCorsHeaders(res);
+  if (req.method === "OPTIONS") return json(res, 204, {});
+
   try {
     if (req.method !== "DELETE" && req.method !== "POST") {
       return json(res, 405, { error: "Method not allowed" });
     }
+
+    const limit = checkRateLimit(req);
+    if (!limit.allowed) return json(res, 429, { error: `Too many requests. Retry after ${limit.retryAfter}s` });
 
     const ctx = await getRequester(req);
     if (ctx.error) return json(res, 401, { error: ctx.error });

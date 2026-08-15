@@ -32,12 +32,14 @@ const formatEmployeeLookupError = (error) => {
 export const getBusinessByCode = async (businessCode) => {
   if (!isSupabaseConfigured) return { data: null, error: new Error(notConfiguredResult.error) };
 
-  const code = String(businessCode || "").trim();
+  const code = String(businessCode || "").trim().toUpperCase();
   if (!code) return { data: null, error: new Error("Business code is required.") };
 
   try {
-    const query = supabase.from("businesses").select("id, code, name").ilike("code", code).single();
-    const { data, error } = await withTimeout(query, 15000, "Business lookup");
+    // ✅ #18 — Use eq (exact match) instead of ilike — faster and no timing leak
+    // Business codes are stored uppercase. Normalize input before comparing.
+    const query = supabase.from("businesses").select("id, code, name").eq("code", code).single();
+    const { data, error } = await withTimeout(query, 5000, "Business lookup");
     return { data, error };
   } catch (err) {
     return { data: null, error: err };
@@ -101,40 +103,6 @@ export const loginEmployee = async (email, password, businessCode) => {
   }
 
   return { success: true, user: profile.data, session: data.session };
-};
-
-export const signupEmployee = async ({ email, password, name, businessId, role }) => {
-  if (!isSupabaseConfigured) return notConfiguredResult;
-
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) return { success: false, error: error.message };
-
-  const authUid = data?.user?.id;
-  if (!authUid) {
-    return {
-      success: false,
-      error:
-        "Sign up created the auth user, but no user id was returned (email confirmation may be required).",
-    };
-  }
-
-  const { data: employee, error: insertError } = await supabase
-    .from("employees")
-    .insert([
-      {
-        auth_uid: authUid,
-        email,
-        name,
-        business_id: businessId,
-        role,
-      },
-    ])
-    .select("id, auth_uid, business_id, name, email, role, created_at")
-    .single();
-
-  if (insertError) return { success: false, error: insertError.message };
-
-  return { success: true, user: employee };
 };
 
 export const logoutEmployee = async () => {

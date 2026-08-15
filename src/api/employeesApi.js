@@ -39,8 +39,8 @@ const request = async (path, { method = "GET", body } = {}) => {
 
   let res = await doFetch(token);
 
-  // On 401/403 try a session refresh and retry once — handles expired tokens
-  if (res.status === 401 || res.status === 403) {
+  // ✅ Only retry on 401 (expired token) — 403 means wrong role, refreshing won't help
+  if (res.status === 401) {
     await supabase.auth.refreshSession();
     const freshToken = await getAccessToken();
     res = await doFetch(freshToken);

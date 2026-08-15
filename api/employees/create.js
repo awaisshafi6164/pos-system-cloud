@@ -1,4 +1,4 @@
-const { getRequester, requireAdminRole, parseJsonBody, json } = require("../_utils/supabaseAdmin");
+const { getRequester, requireAdminRole, parseJsonBody, setCorsHeaders, checkInviteRateLimit, json } = require("../_utils/supabaseAdmin");
 
 // ✅ Use admin getUserByEmail — single direct lookup instead of paginating all users
 const findAuthUserByEmail = async (supabaseAdmin, email) => {
@@ -15,8 +15,15 @@ const findAuthUserByEmail = async (supabaseAdmin, email) => {
 };
 
 module.exports = async function handler(req, res) {
+  setCorsHeaders(res);
+  if (req.method === "OPTIONS") return json(res, 204, {});
+
   try {
     if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+
+    // ✅ Stricter rate limit on invite endpoint — 10 invites per 5 minutes per IP
+    const limit = checkInviteRateLimit(req);
+    if (!limit.allowed) return json(res, 429, { error: `Too many requests. Retry after ${limit.retryAfter}s` });
 
     const ctx = await getRequester(req);
     if (ctx.error) return json(res, 401, { error: ctx.error });
@@ -32,6 +39,18 @@ module.exports = async function handler(req, res) {
     if (!email) return json(res, 400, { error: "email is required" });
     if (!name) return json(res, 400, { error: "name is required" });
     if (!role) return json(res, 400, { error: "role is required" });
+
+    // ✅ Whitelist valid roles — prevents arbitrary role strings
+    const VALID_ROLES = ["admin", "cashier", "manager", "receptionist"];
+    if (!VALID_ROLES.includes(role)) {
+      return json(res, 400, { error: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` });
+    }
+
+    // ✅ Basic input length validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return json(res, 400, { error: "Invalid email format" });
+    if (name.length > 100) return json(res, 400, { error: "Name too long (max 100 chars)" });
+    if (email.length > 200) return json(res, 400, { error: "Email too long (max 200 chars)" });
 
     let authUid = null;
     let successMessage = "Employee created. An invite email was sent to set a password.";

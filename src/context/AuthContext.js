@@ -48,6 +48,8 @@ export const AuthProvider = ({ children }) => {
         if (!businessId) {
           // User is authenticated but no stored employee yet (mid-login race).
           // Don't clear — let login.js finish setting the employee.
+          // ✅ Must still resolve loading so the app doesn't spin forever.
+          if (isMounted) setLoading(false);
           return;
         }
 

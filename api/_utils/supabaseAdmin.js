@@ -20,14 +20,61 @@ const json = (res, statusCode, payload) => {
   res.end(JSON.stringify(payload));
 };
 
+// ✅ #7 — CORS headers on all serverless functions
+const setCorsHeaders = (res) => {
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
+  res.setHeader("Access-Control-Allow-Origin", allowedOrigin);
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Business-Id");
+};
+
+// ✅ #6 — Body size limit to prevent OOM from large payloads
+const MAX_BODY_BYTES = 1_000_000; // 1 MB
+
 const parseJsonBody = async (req) => {
   if (req.body && typeof req.body === "object") return req.body;
 
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let totalSize = 0;
+  for await (const chunk of req) {
+    totalSize += chunk.length;
+    if (totalSize > MAX_BODY_BYTES) {
+      throw new Error("Payload too large (max 1 MB)");
+    }
+    chunks.push(chunk);
+  }
   if (chunks.length === 0) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 };
+
+// ✅ #8 — In-memory rate limiter (no external dependency needed)
+// Tracks request counts per IP per minute window
+const _rateLimitStore = new Map();
+
+const checkRateLimit = (req, maxRequests = 20, windowMs = 60_000) => {
+  const ip =
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    req.socket?.remoteAddress ||
+    "unknown";
+
+  const now = Date.now();
+  const entry = _rateLimitStore.get(ip);
+
+  if (!entry || now - entry.windowStart > windowMs) {
+    _rateLimitStore.set(ip, { count: 1, windowStart: now });
+    return { allowed: true };
+  }
+
+  entry.count += 1;
+  if (entry.count > maxRequests) {
+    return { allowed: false, retryAfter: Math.ceil((entry.windowStart + windowMs - now) / 1000) };
+  }
+
+  return { allowed: true };
+};
+
+// Stricter rate limit specifically for the invite/create endpoint (10 per 5 min)
+const checkInviteRateLimit = (req) => checkRateLimit(req, 10, 5 * 60_000);
 
 let _adminClient = null;
 
@@ -92,5 +139,8 @@ module.exports = {
   getRequester,
   requireAdminRole,
   parseJsonBody,
+  setCorsHeaders,
+  checkRateLimit,
+  checkInviteRateLimit,
   json,
 };

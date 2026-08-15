@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { withRetry } from "../utils/retry";
 
 const toDbRow = (form, businessId) => ({
   business_id: businessId,
@@ -21,14 +22,17 @@ const fromDbRow = (row) => ({
 });
 
 export const listMenuItems = async (businessId) => {
-  const { data, error } = await supabase
-    .from("menu")
-    .select("id, item_code, item_name, item_category, item_price, stock_qty, date_modified")
-    .eq("business_id", businessId)
-    .order("item_name", { ascending: true });
+  // ✅ #19 — Retry on network failures
+  return withRetry(async () => {
+    const { data, error } = await supabase
+      .from("menu")
+      .select("id, item_code, item_name, item_category, item_price, stock_qty, date_modified")
+      .eq("business_id", businessId)
+      .order("item_name", { ascending: true });
 
-  if (error) throw new Error(error.message);
-  return (data || []).map(fromDbRow);
+    if (error) throw new Error(error.message);
+    return (data || []).map(fromDbRow);
+  });
 };
 
 export const createMenuItem = async (form, businessId) => {

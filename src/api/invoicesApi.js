@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { withRetry } from "../utils/retry";
 
 const toIso = (dateTimeStr) => {
   if (!dateTimeStr) return null;
@@ -159,16 +160,14 @@ export const saveInvoiceLegacy = async ({ businessId, payload, isCreditUpdate })
 
     if (updateError) throw new Error(updateError.message);
 
-    const { error: deleteItemsError } = await supabase
-      .from("invoice_items")
-      .delete()
-      .eq("invoice_id", existing.id);
-    if (deleteItemsError) throw new Error(deleteItemsError.message);
-
-    const { error: insertItemsError } = await supabase
-      .from("invoice_items")
-      .insert(itemRows.map((r) => ({ ...r, invoice_id: existing.id, business_id: businessId })));
-    if (insertItemsError) throw new Error(insertItemsError.message);
+    // ✅ Atomic delete + reinsert in a single DB transaction via RPC
+    // Prevents data corruption if network drops between delete and insert
+    const { error: replaceError } = await supabase.rpc("replace_invoice_items", {
+      p_invoice_id: existing.id,
+      p_business_id: businessId,
+      p_items: itemRows.map((r) => ({ ...r, invoice_id: existing.id, business_id: businessId })),
+    });
+    if (replaceError) throw new Error(replaceError.message);
 
     return { success: true };
   }
@@ -193,49 +192,51 @@ export const getTotalSalesLegacy = async ({ businessId, fromDate, toDate }) => {
   if (!businessId) throw new Error("Missing businessId");
   if (!fromDate || !toDate) throw new Error("Missing date range");
 
+  // ✅ #13 — Let Postgres do the sum, not JavaScript
   const { data, error } = await supabase
     .from("invoices")
-    .select("total_bill_amount, datetime")
+    .select("total_bill_amount.sum()")
     .eq("business_id", businessId)
     .gte("datetime", startOfDayIso(fromDate))
     .lte("datetime", endOfDayIso(toDate));
 
   if (error) throw new Error(error.message);
-  const total = (data || []).reduce((sum, r) => sum + Number(r.total_bill_amount || 0), 0);
-  return { success: true, total: total };
+  return { success: true, total: Number(data?.[0]?.sum ?? 0) };
 };
 
 export const listInvoicesLegacy = async ({ businessId, fromDate, toDate }) => {
   if (!businessId) throw new Error("Missing businessId");
+  if (!fromDate || !toDate) throw new Error("Date range (fromDate + toDate) is required.");
 
-  let query = supabase
-    .from("invoices")
-    .select(
-      "id, business_id, usin, pra_invoice_number, ref_usin, datetime, buyer_name, buyer_pntn, buyer_cnic, buyer_phone, address, total_sale_value, total_tax_charged, discount, further_tax, total_bill_amount, total_quantity, payment_mode, invoice_type, pos_charges, service_charges, balance, paid, check_in_date, check_out_date, time_in, time_out, emergency_contact, nationality, invoice_items(item_code, item_name, quantity, sale_value, tax_rate, tax_charged, total_amount)",
-      { count: "exact" }
-    )
-    .eq("business_id", businessId)
-    .order("datetime", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(5000); // explicit high limit — prevents PostgREST default 1000 row cap
+  // ✅ #19 — Retry on network failures (read-only)
+  return withRetry(async () => {
+    const { data, error } = await supabase
+      .from("invoices")
+      .select(
+        "id, business_id, usin, pra_invoice_number, ref_usin, datetime, buyer_name, buyer_pntn, buyer_cnic, buyer_phone, address, total_sale_value, total_tax_charged, discount, further_tax, total_bill_amount, total_quantity, payment_mode, invoice_type, pos_charges, service_charges, balance, paid, check_in_date, check_out_date, time_in, time_out, emergency_contact, nationality, invoice_items(item_code, item_name, quantity, sale_value, tax_rate, tax_charged, total_amount)",
+        { count: "exact" }
+      )
+      .eq("business_id", businessId)
+      .gte("datetime", startOfDayIso(fromDate))
+      .lte("datetime", endOfDayIso(toDate))
+      .order("datetime", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(2000);
 
-  if (fromDate) query = query.gte("datetime", startOfDayIso(fromDate));
-  if (toDate) query = query.lte("datetime", endOfDayIso(toDate));
+    if (error) throw new Error(error.message);
 
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  return (data || []).map((row) => {
-    const items = (row.invoice_items || []).map((it) => ({
-      ItemCode: it.item_code,
-      ItemName: it.item_name,
-      Quantity: it.quantity,
-      SaleValue: it.sale_value,
-      TaxRate: it.tax_rate,
-      TaxCharged: it.tax_charged,
-      TotalAmount: it.total_amount,
-    }));
-    return mapLegacyInvoiceRow(row, items);
+    return (data || []).map((row) => {
+      const items = (row.invoice_items || []).map((it) => ({
+        ItemCode: it.item_code,
+        ItemName: it.item_name,
+        Quantity: it.quantity,
+        SaleValue: it.sale_value,
+        TaxRate: it.tax_rate,
+        TaxCharged: it.tax_charged,
+        TotalAmount: it.total_amount,
+      }));
+      return mapLegacyInvoiceRow(row, items);
+    });
   });
 };
 

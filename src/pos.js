@@ -63,6 +63,7 @@ const POS = ({ isHotelLayout = false }) => {
   const [make_invoice_editable, setMakeInvoiceEditable] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [isPrintReady, setIsPrintReady] = useState(false); // enables PRINT — separate from save state
   const [isPublishing, setIsPublishing] = useState(false);
   const [isCreditRecordLoaded, setIsCreditRecordLoaded] = useState(false);
   const [loadedPRAInvoiceNumber, setLoadedPRAInvoiceNumber] = useState(null);
@@ -153,8 +154,11 @@ const POS = ({ isHotelLayout = false }) => {
     const invoiceInput = document.getElementById("invoice-number");
     if (!invoiceInput) return;
     if (isCreditInvoice) {
-      invoiceInput.value = "";
-      invoiceInput.placeholder = "Enter your invoice number (e.g., LR-01, 001)";
+      // ✅ Pre-fill with the current invoice number so user can edit it directly
+      // instead of starting from blank every time
+      if (!invoiceInput.value) {
+        invoiceInput.placeholder = "Enter Invoice No (e.g., LR-01)";
+      }
       return;
     }
 
@@ -383,7 +387,8 @@ const POS = ({ isHotelLayout = false }) => {
 
         // Track credit record loaded state for hotel SUBMIT button
         setIsCreditRecordLoaded(true);
-        setIsSaved(true); // Credit invoice is already saved, allow printing
+        setIsSaved(false);       // ✅ Invoice loaded but NOT yet updated — show UPDATE button
+        setIsPrintReady(true);   // ✅ Allow printing the loaded invoice
         const praInvNo = data.invoice.InvoiceNumber || data.invoice.pra_invoice_number || null;
         const normalizedPRA = (praInvNo && praInvNo !== invoiceNo && praInvNo !== data.invoice.USIN) ? praInvNo : null;
         setLoadedPRAInvoiceNumber(normalizedPRA);
@@ -621,6 +626,7 @@ const POS = ({ isHotelLayout = false }) => {
     setIsCreditInvoice(false);
     setIsSaving(false); // 🔓 Re-enable after reset
     setIsSaved(false); // 🔓 New invoice, not saved yet
+    setIsPrintReady(false);
     setIsPublishing(false);
     setIsCreditRecordLoaded(false);
     setLoadedPRAInvoiceNumber(null);
@@ -678,7 +684,7 @@ const POS = ({ isHotelLayout = false }) => {
         return;
       }
 
-      const { pra_posid, pra_token, pra_api_type, pra_linked } = settings;
+      const { pra_posid, pra_api_type, pra_linked } = settings;
 
       const getPaymentCode = (mode) => {
         switch (mode) {
@@ -790,8 +796,7 @@ const POS = ({ isHotelLayout = false }) => {
           },
           body: JSON.stringify({
             invoiceData: payload,
-            praToken: pra_token,
-            environment: pra_api_type, // "sandbox" or "production"
+            environment: pra_api_type, // "sandbox" or "production" — token is read server-side
           }),
         });
 
@@ -843,6 +848,7 @@ const POS = ({ isHotelLayout = false }) => {
           : `✅ Invoice ${actionText} successfully. Invoice #: ${payload.InvoiceNumber}`;
         document.getElementById("api-message").textContent = successMessage;
         setIsSaved(true);
+        setIsPrintReady(true); // ✅ Enable PRINT after successful save
 
         // ✅ Increment invoice counter for new invoices (not credit updates)
         if (!isCreditUpdate) {
@@ -942,7 +948,7 @@ const POS = ({ isHotelLayout = false }) => {
         return;
       }
 
-      const { pra_posid, pra_token, pra_api_type, pra_linked } = settings;
+      const { pra_posid, pra_api_type, pra_linked } = settings;
 
       if (pra_linked !== "1") {
         document.getElementById("api-message").textContent = "⚠️ PRA not linked. Please enable PRA in settings.";
@@ -1042,8 +1048,7 @@ const POS = ({ isHotelLayout = false }) => {
         },
         body: JSON.stringify({
           invoiceData: payload,
-          praToken: pra_token,
-          environment: pra_api_type,
+          environment: pra_api_type, // token is read server-side
         }),
       });
 
@@ -1085,6 +1090,8 @@ const POS = ({ isHotelLayout = false }) => {
 
       document.getElementById("api-message").textContent =
         `✅ Submitted to PRA successfully. PRA #: ${praResult.InvoiceNumber}`;
+      setIsSaved(true);
+      setIsPrintReady(true); // ✅ Enable PRINT after successful PRA submit
 
     } catch (err) {
       console.error("❌ Publish error:", err);
@@ -1194,7 +1201,10 @@ const POS = ({ isHotelLayout = false }) => {
                         name="invoice-type"
                         value="credit"
                         onChange={() => {
-                          setIsSaving(true);
+                          // ✅ Don't set isSaving — no invoice loaded yet, button should show UPDATE
+                          setIsSaving(false);
+                          setIsSaved(false);
+                          setIsPrintReady(false);
                           setIsCreditInvoice(true);
                           const invoiceInput = document.getElementById("invoice-number");
                           if (invoiceInput) {
@@ -1587,16 +1597,16 @@ const POS = ({ isHotelLayout = false }) => {
                   )}
 
                   <button
-                    className={`btn ${!isSaved ? "btn-disabled" : "btn-secondary"}`}
+                    className={`btn ${!isPrintReady ? "btn-disabled" : "btn-secondary"}`}
                     style={{
                       marginRight: "10px",
                       paddingLeft: "30px",
                       paddingRight: "30px",
-                      opacity: !isSaved ? 0.5 : 1,
-                      cursor: !isSaved ? "not-allowed" : "pointer",
+                      opacity: !isPrintReady ? 0.5 : 1,
+                      cursor: !isPrintReady ? "not-allowed" : "pointer",
                     }}
                     onClick={() => handlePrint(lastPRAInvoice)}
-                    disabled={!isSaved}
+                    disabled={!isPrintReady}
                     tabIndex={isHotelLayout && isCreditInvoice ? 11 : 10}
                   >
                     PRINT
