@@ -25,7 +25,8 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow
+  TableRow,
+  Skeleton,
 } from "@mui/material";
 import {
   Edit,
@@ -46,11 +47,17 @@ function Employees() {
     role: "",
   });
   const [busy, setBusy] = useState(false);
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
 
   // Fetch all employees
   const loadEmployees = async () => {
-    const data = await listEmployees();
-    setEmployees(Array.isArray(data) ? data : []);
+    setLoadingEmployees(true);
+    try {
+      const data = await listEmployees();
+      setEmployees(Array.isArray(data) ? data : []);
+    } finally {
+      setLoadingEmployees(false);
+    }
   };
 
   // Add employee
@@ -263,7 +270,7 @@ function Employees() {
                             Employees List
                           </Typography>
                           <Typography variant="body2" color="text.secondary">
-                            {filteredEmployees.length} Members
+                            {loadingEmployees ? <Skeleton width={80} /> : `${filteredEmployees.length} Members`}
                           </Typography>
                         </Box>
                       </Box>
@@ -294,75 +301,99 @@ function Employees() {
                             </TableRow>
                           </TableHead>
                           <TableBody>
-                            <AnimatePresence>
-                              {filteredEmployees.map((emp, index) => (
-                                <TableRow
-                                  component={motion.tr}
-                                  key={emp.id}
-                                  initial={{ opacity: 0 }}
-                                  animate={{ opacity: 1 }}
-                                  exit={{ opacity: 0 }}
-                                  transition={{ delay: index * 0.05 }}
-                                  sx={{ '&:hover': { bgcolor: 'action.hover' } }}
-                                >
-                                  {/* <TableCell>#{emp.id}</TableCell> */}
+                            {loadingEmployees ? (
+                              // Skeleton rows while loading
+                              [...Array(5)].map((_, i) => (
+                                <TableRow key={i}>
                                   <TableCell>
                                     <Box>
-                                      <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                        {emp.name}
-                                      </Typography>
-                                      <Typography variant="caption" color="primary">
-                                        {emp.email}
-                                      </Typography>
+                                      <Skeleton variant="text" width="60%" height={22} />
+                                      <Skeleton variant="text" width="80%" height={16} />
                                     </Box>
                                   </TableCell>
                                   <TableCell>
-                                    <Chip
-                                      label={emp.role}
-                                      color={getRoleColor(emp.role)}
-                                      size="small"
-                                    />
+                                    <Skeleton variant="rounded" width={72} height={24} />
                                   </TableCell>
-	                                  <TableCell align="center">
-	                                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-	                                      <Tooltip title="Send password reset">
-	                                        <IconButton
-	                                          size="small"
-	                                          onClick={() => handleSendResetPassword(emp.email)}
-	                                          sx={{ color: '#666' }}
-	                                          disabled={busy}
-	                                        >
-	                                          <LockReset fontSize="small" />
-	                                        </IconButton>
-	                                      </Tooltip>
-	                                      <Tooltip title="Edit">
-	                                        <IconButton
-	                                          size="small"
-	                                          onClick={() => handleEdit(emp)}
-	                                          sx={{ color: '#666' }}
-	                                          disabled={busy}
-	                                        >
-	                                          <Edit fontSize="small" />
-	                                        </IconButton>
-	                                      </Tooltip>
-	                                      <Tooltip title="Delete">
-	                                        <IconButton
-	                                          size="small"
-	                                          onClick={() => handleDelete(emp.id)}
-	                                          sx={{ color: '#666' }}
-	                                          disabled={busy}
-	                                        >
-	                                          <Delete fontSize="small" />
-	                                        </IconButton>
-	                                      </Tooltip>
-	                                    </Box>
+                                  <TableCell align="center">
+                                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                                      <Skeleton variant="circular" width={30} height={30} />
+                                      <Skeleton variant="circular" width={30} height={30} />
+                                      <Skeleton variant="circular" width={30} height={30} />
+                                    </Box>
                                   </TableCell>
                                 </TableRow>
-                              ))}
-                            </AnimatePresence>
+                              ))
+                            ) : (
+                              <AnimatePresence>
+                                {filteredEmployees.map((emp, index) => (
+                                  <TableRow
+                                    component={motion.tr}
+                                    key={emp.id}
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ delay: index * 0.05 }}
+                                    sx={{ '&:hover': { bgcolor: 'action.hover' } }}
+                                  >
+                                    {/* <TableCell>#{emp.id}</TableCell> */}
+                                    <TableCell>
+                                      <Box>
+                                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                          {emp.name}
+                                        </Typography>
+                                        <Typography variant="caption" color="primary">
+                                          {emp.email}
+                                        </Typography>
+                                      </Box>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Chip
+                                        label={emp.role}
+                                        color={getRoleColor(emp.role)}
+                                        size="small"
+                                      />
+                                    </TableCell>
+	                                    <TableCell align="center">
+	                                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+	                                        <Tooltip title="Send password reset">
+	                                          <IconButton
+	                                            size="small"
+	                                            onClick={() => handleSendResetPassword(emp.email)}
+	                                            sx={{ color: '#666' }}
+	                                            disabled={busy}
+	                                          >
+	                                            <LockReset fontSize="small" />
+	                                          </IconButton>
+	                                        </Tooltip>
+	                                        <Tooltip title="Edit">
+	                                          <IconButton
+	                                            size="small"
+	                                            onClick={() => handleEdit(emp)}
+	                                            sx={{ color: '#666' }}
+	                                            disabled={busy}
+	                                          >
+	                                            <Edit fontSize="small" />
+	                                          </IconButton>
+	                                        </Tooltip>
+	                                        <Tooltip title="Delete">
+	                                          <IconButton
+	                                            size="small"
+	                                            onClick={() => handleDelete(emp.id)}
+	                                            sx={{ color: '#666' }}
+	                                            disabled={busy}
+	                                          >
+	                                            <Delete fontSize="small" />
+	                                          </IconButton>
+	                                        </Tooltip>
+	                                      </Box>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </AnimatePresence>
+                            )}
                           </TableBody>
                         </Table>
-                        {filteredEmployees.length === 0 && (
+                        {!loadingEmployees && filteredEmployees.length === 0 && (
                           <Box sx={{ p: 4, textAlign: 'center' }}>
                             <Typography variant="body1" color="text.secondary">
                               No employees found

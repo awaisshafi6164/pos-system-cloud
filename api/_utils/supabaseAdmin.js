@@ -29,13 +29,19 @@ const parseJsonBody = async (req) => {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 };
 
+let _adminClient = null;
+
 const getAdminClient = async () => {
+  if (_adminClient) return _adminClient;
+
   const supabaseUrl = getEnv("SUPABASE_URL");
   const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
   const { createClient } = await import("@supabase/supabase-js");
-  return createClient(supabaseUrl, serviceRoleKey, {
+  _adminClient = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: "public" },
   });
+  return _adminClient;
 };
 
 const getBusinessIdHeader = (req) => {
@@ -51,16 +57,15 @@ const getRequester = async (req) => {
   if (!token) return { error: "Missing Authorization: Bearer <access_token>" };
 
   const supabaseAdmin = await getAdminClient();
+
+  const businessId = getBusinessIdHeader(req);
+  if (!businessId) return { error: "Missing X-Business-Id header." };
+
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error) return { error: error.message || "Invalid auth token" };
 
   const authUid = data?.user?.id;
   if (!authUid) return { error: "No user found for token" };
-
-  const businessId = getBusinessIdHeader(req);
-  if (!businessId) {
-    return { error: "Missing X-Business-Id header." };
-  }
 
   const { data: employee, error: employeeError } = await supabaseAdmin
     .from("employees")

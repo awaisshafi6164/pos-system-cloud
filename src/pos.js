@@ -1539,41 +1539,35 @@ const POS = ({ isHotelLayout = false }) => {
 
                 <div className="horizontal-group" id="action-buttons">
                   <button
-                    className={`btn ${isSaving ? "btn-disabled" : "btn-primary"}`}
+                    className={`btn btn-primary pos-btn-save${isSaved ? " btn-saved" : ""}`}
                     style={{
                       marginRight: "10px",
                       paddingLeft: "30px",
                       paddingRight: "30px",
-                      opacity: isSaving ? 0.5 : 1,
-                      cursor: isSaving ? "not-allowed" : "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "8px",
                     }}
                     onClick={handleSave}
                     disabled={
                       isSaving
+                      || (isSaved && !isCreditInvoice)
                       || isPublishing
                       || (isHotelLayout && isCreditInvoice && !isCreditRecordLoaded)
                       || (isHotelLayout && isCreditInvoice && !!loadedPRAInvoiceNumber)
                     }
                     tabIndex={9}
                   >
-                    {isSaving && !isSaved && (
-                      <span
-                        style={{
-                          width: "14px",
-                          height: "14px",
-                          border: "2px solid #ffffff80",
-                          borderTop: "2px solid #fff",
-                          borderRadius: "50%",
-                          animation: "spin 0.8s linear infinite",
-                          display: "inline-block",
-                        }}
-                      />
+                    {isSaving && !isSaved ? (
+                      <span className="btn-spinner-wrap">
+                        <span className="btn-spinner" />
+                        Saving…
+                      </span>
+                    ) : isSaved ? (
+                      <span className="btn-spinner-wrap">
+                        <span className="btn-check">✓</span>
+                        Saved!
+                      </span>
+                    ) : (
+                      isHotelLayout && isCreditInvoice ? "UPDATE" : "SAVE"
                     )}
-                    {isSaving && !isSaved ? "SAVING..." : (isHotelLayout && isCreditInvoice ? "UPDATE" : "SAVE")}
                   </button>
 
                   {isHotelLayout && isCreditInvoice && (

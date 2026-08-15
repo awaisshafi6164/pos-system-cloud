@@ -356,3 +356,47 @@
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* POS Save button — 3-state animation (matches Settings save button) */
+.pos-btn-save {
+  transition: background-color 0.2s;
+}
+
+.pos-btn-save:disabled {
+  opacity: 0.75;
+  cursor: not-allowed !important;
+  pointer-events: all !important;
+}
+
+.pos-btn-save.btn-saved {
+  cursor: not-allowed !important;
+}
+
+.pos-btn-save.btn-saved {
+  background-color: #16a34a !important;
+}
+
+.pos-btn-save.btn-saved:hover {
+  background-color: #15803d !important;
+}
+
+.pos-btn-save .btn-spinner-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-btn-save .btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+.pos-btn-save .btn-check {
+  font-size: 15px;
+}

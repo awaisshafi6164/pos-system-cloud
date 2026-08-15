@@ -36,6 +36,7 @@ export const AuthProvider = ({ children }) => {
       try {
         const { data } = await supabase.auth.getSession();
         const sessionUser = data?.session?.user;
+
         if (!sessionUser?.id) {
           if (isMounted) setEmployee(null);
           return;
@@ -43,16 +44,16 @@ export const AuthProvider = ({ children }) => {
 
         const stored = employeeManager.getEmployee();
         const businessId = stored?.business_id;
+
         if (!businessId) {
-          if (isMounted) setEmployee(null);
+          // User is authenticated but no stored employee yet (mid-login race).
+          // Don't clear — let login.js finish setting the employee.
           return;
         }
 
         const profile = await getEmployeeMembership({ authUid: sessionUser.id, businessId });
         if (isMounted) {
           if (profile?.error) {
-            // Only clear auth if membership is truly missing for this business.
-            // For timeouts/network blips, keep the existing stored employee so the UI doesn't redirect.
             if (isMembershipMissingError(profile.error)) setEmployee(null);
             else console.warn("AuthContext: employee membership refresh failed (keeping current session)", profile.error);
           } else {
@@ -68,31 +69,14 @@ export const AuthProvider = ({ children }) => {
 
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
-        // Token refresh events are frequent; don't re-query membership on them.
-        if (event === "TOKEN_REFRESHED") return;
-
-        const sessionUser = session?.user;
-        if (!sessionUser?.id) {
+        // Only act on SIGNED_OUT — all other events are handled by loadFromSession
+        // or by login.js which calls setEmployee(result.user) directly.
+        // Intercepting SIGNED_IN here causes a race that wipes the employee set by login.js.
+        if (event === "SIGNED_OUT") {
           setEmployee(null);
-          return;
         }
-        const stored = employeeManager.getEmployee();
-        const businessId = stored?.business_id;
-        if (!businessId) {
-          setEmployee(null);
-          return;
-        }
-
-        const profile = await getEmployeeMembership({ authUid: sessionUser.id, businessId });
-        if (profile?.error) {
-          if (isMembershipMissingError(profile.error)) setEmployee(null);
-          else console.warn("AuthContext: employee membership refresh failed (keeping current session)", profile.error);
-          return;
-        }
-        setEmployee(profile.data);
       } catch (err) {
-        // Avoid kicking the user out on transient network issues.
-        console.warn("AuthContext: auth state change handler error (keeping current session)", err);
+        console.warn("AuthContext: auth state change handler error", err);
       }
     });
 

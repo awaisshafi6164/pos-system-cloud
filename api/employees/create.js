@@ -1,25 +1,17 @@
 const { getRequester, requireAdminRole, parseJsonBody, json } = require("../_utils/supabaseAdmin");
 
+// ✅ Use admin getUserByEmail — single direct lookup instead of paginating all users
 const findAuthUserByEmail = async (supabaseAdmin, email) => {
   const normalized = String(email || "").trim().toLowerCase();
   if (!normalized) return null;
-  if (!supabaseAdmin.auth?.admin?.listUsers) return null;
 
-  // Supabase doesn't provide a direct "get user by email" in all environments,
-  // so we paginate through users. Keep a hard cap to avoid long scans.
-  const perPage = 1000;
-  for (let page = 1; page <= 10; page += 1) {
-    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage });
-    if (error) throw error;
-
-    const users = data?.users || [];
-    const match = users.find((u) => String(u.email || "").trim().toLowerCase() === normalized);
-    if (match) return match;
-
-    if (users.length < perPage) break;
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserByEmail(normalized);
+    if (error || !data?.user) return null;
+    return data.user;
+  } catch {
+    return null;
   }
-
-  return null;
 };
 
 module.exports = async function handler(req, res) {

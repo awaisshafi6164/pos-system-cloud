@@ -55,7 +55,7 @@ export const getEmployeeMembership = async ({ authUid, businessId }) => {
       .eq("business_id", businessId)
       .single();
 
-    const { data, error } = await withTimeout(query, 15000, "Employee lookup");
+    const { data, error } = await withTimeout(query, 5000, "Employee lookup");
     return { data, error };
   } catch (err) {
     return { data: null, error: err };

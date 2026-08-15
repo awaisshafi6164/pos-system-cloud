@@ -17,6 +17,8 @@ module.exports = async function handler(req, res) {
       .order("created_at", { ascending: false });
 
     if (error) return json(res, 400, { error: error.message });
+
+    res.setHeader("Cache-Control", "no-store");
     return json(res, 200, { data });
   } catch (err) {
     return json(res, 500, { error: err?.message || "Server error" });

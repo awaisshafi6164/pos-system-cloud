@@ -1,13 +1,28 @@
-# Getting Started with Create React App
+# POS Cloud
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## Local Development
 
-## Available Scripts
+This project uses **Vercel Serverless Functions** for the `/api/*` routes (employee management, PRA integration). The React dev server (`npm start`) does not serve these — you must run both processes:
 
-In the project directory, you can run:
+**Terminal 1 — API server (Vercel functions + env vars):**
+```bash
+vercel dev --listen 3001
+```
 
-### `npm start`
+**Terminal 2 — React app:**
+```bash
+npm start
+```
 
+The `"proxy": "http://localhost:3001"` in `package.json` forwards all `/api/*` requests from the React dev server to the Vercel dev server automatically.
+
+> On first run, `vercel dev` will ask you to link the project — choose the existing `pos-system-cloud` project. It will pull env vars from Vercel automatically.
+
+## Production
+
+Deployed on Vercel. Both React and API functions are served from the same domain — no proxy needed.
+
+---
 Runs the app in the development mode.\
 Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 

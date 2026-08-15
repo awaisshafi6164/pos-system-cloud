@@ -18,6 +18,7 @@ import {
   Checkbox,
   Tooltip,
   TableSortLabel,
+  Skeleton,
 } from "@mui/material";
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
@@ -92,6 +93,7 @@ function Invoice() {
   const [selectedIds, setSelectedIds] = useState([]);
   // Column sort for the invoices table (default: USIN/Invoice No desc)
   const [invoiceSort, setInvoiceSort] = useState({ key: "USIN", dir: "desc" });
+  const [loadingInvoices, setLoadingInvoices] = useState(true);
 
   useEffect(() => {
     const fetchInvoices = async () => {
@@ -99,6 +101,7 @@ function Invoice() {
         if (authLoading) return;
         if (!employee?.business_id) return;
         if (!fromDate || !toDate) return;
+        setLoadingInvoices(true);
         const data = await listInvoicesLegacy({
           businessId: employee.business_id,
           fromDate,
@@ -121,6 +124,8 @@ function Invoice() {
         setSelectedInvoiceItems([]);
       } catch (err) {
         setFetchError("❌ Failed to fetch invoices: " + err.message);
+      } finally {
+        setLoadingInvoices(false);
       }
     };
 
@@ -609,9 +614,11 @@ function Invoice() {
               <h2 style={{ margin: 0 }}>
                 All Invoices
                 <span style={{ fontSize: "14px", fontWeight: 400, color: "#888", marginLeft: "10px" }}>
-                  ({visibleInvoices.length} records)
+                  {loadingInvoices
+                    ? <Skeleton component="span" variant="text" width={80} sx={{ display: "inline-block" }} />
+                    : `(${visibleInvoices.length} records)`}
                 </span>
-                {selectedIds.length > 0 && (
+                {!loadingInvoices && selectedIds.length > 0 && (
                   <span style={{ fontSize: "14px", fontWeight: 400, color: "#666", marginLeft: "12px" }}>
                     {selectedIds.length} selected
                   </span>
@@ -636,7 +643,7 @@ function Invoice() {
                 )}
               </div>
             </div>
-            {fetchError && <p style={{ color: "red", marginBottom: "10px" }}>{fetchError}</p>}
+            {!loadingInvoices && fetchError && <p style={{ color: "red", marginBottom: "10px" }}>{fetchError}</p>}
             <TableContainer component={Paper}
               sx={{
                 maxHeight: 300,
@@ -644,7 +651,7 @@ function Invoice() {
             >
               <Table size="small">
                 <TableHead>
-                  {invoices.length > 0 && (
+                  {(loadingInvoices || invoices.length > 0) && (
                     <TableRow sx={{ height: "28px" }}>
                       {!praLinked && (
                         <TableCell
@@ -657,6 +664,7 @@ function Invoice() {
                               indeterminate={selectedIds.length > 0 && selectedIds.length < visibleInvoices.length}
                               checked={visibleInvoices.length > 0 && selectedIds.length === visibleInvoices.length}
                               onChange={handleSelectAll}
+                              disabled={loadingInvoices}
                             />
                           </Tooltip>
                         </TableCell>
@@ -666,8 +674,24 @@ function Invoice() {
                   )}
                 </TableHead>
                 <TableBody>
-                  {visibleInvoices
-                    .map((inv) => (
+                  {loadingInvoices ? (
+                    // Skeleton rows while loading
+                    [...Array(8)].map((_, i) => (
+                      <TableRow key={i} sx={{ height: "28px" }}>
+                        {!praLinked && (
+                          <TableCell sx={{ border: "1px solid #ddd", padding: "0 4px", width: "40px" }}>
+                            <Skeleton variant="rectangular" width={18} height={18} />
+                          </TableCell>
+                        )}
+                        {getColumns().map((col) => (
+                          <TableCell key={col.key} sx={{ border: "1px solid #ddd", padding: "4px 8px" }}>
+                            <Skeleton variant="text" width={col.key === "BuyerName" ? 120 : col.key === "DateTime" ? 130 : 70} height={14} />
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : (
+                    visibleInvoices.map((inv) => (
                       <TableRow
                         key={inv.id}
                         hover
@@ -694,7 +718,8 @@ function Invoice() {
                         )}
                         {renderTableRow(inv)}
                       </TableRow>
-                    ))}
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>

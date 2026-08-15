@@ -1,32 +1,53 @@
 import { supabase } from "../supabaseClient";
 import employeeManager from "../utils/EmployeeManager";
 
+// ✅ Gets the access token. Uses getSession() which reads from memory — fast.
+// Retries once with a short wait to handle the rare case where the session
+// hasn't fully hydrated from storage on first render.
 const getAccessToken = async () => {
   const { data, error } = await supabase.auth.getSession();
   if (error) throw new Error(error.message);
-  const token = data?.session?.access_token;
-  if (!token) throw new Error("Not authenticated.");
+  let token = data?.session?.access_token;
+
+  if (!token) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const retry = await supabase.auth.getSession();
+    token = retry.data?.session?.access_token;
+  }
+
+  if (!token) throw new Error("Not authenticated. Please log in again.");
   return token;
 };
 
 const request = async (path, { method = "GET", body } = {}) => {
-  const token = await getAccessToken();
   const businessId = employeeManager.getField("business_id");
   if (!businessId) throw new Error("Missing business id. Please log in again.");
-  const res = await fetch(path, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Business-Id": businessId,
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+
+  const token = await getAccessToken();
+
+  const doFetch = (t) =>
+    fetch(path, {
+      method,
+      cache: "no-store",
+      headers: {
+        Authorization: `Bearer ${t}`,
+        "X-Business-Id": businessId,
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+  let res = await doFetch(token);
+
+  // On 401/403 try a session refresh and retry once — handles expired tokens
+  if (res.status === 401 || res.status === 403) {
+    await supabase.auth.refreshSession();
+    const freshToken = await getAccessToken();
+    res = await doFetch(freshToken);
+  }
 
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(json?.error || `Request failed (${res.status})`);
-  }
+  if (!res.ok) throw new Error(json?.error || `Request failed (${res.status})`);
   return json;
 };
 
