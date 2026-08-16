@@ -192,16 +192,16 @@ export const getTotalSalesLegacy = async ({ businessId, fromDate, toDate }) => {
   if (!businessId) throw new Error("Missing businessId");
   if (!fromDate || !toDate) throw new Error("Missing date range");
 
-  // ✅ #13 — Let Postgres do the sum, not JavaScript
   const { data, error } = await supabase
     .from("invoices")
-    .select("total_bill_amount.sum()")
+    .select("total_bill_amount")
     .eq("business_id", businessId)
     .gte("datetime", startOfDayIso(fromDate))
     .lte("datetime", endOfDayIso(toDate));
 
   if (error) throw new Error(error.message);
-  return { success: true, total: Number(data?.[0]?.sum ?? 0) };
+  const total = (data || []).reduce((sum, r) => sum + Number(r.total_bill_amount || 0), 0);
+  return { success: true, total };
 };
 
 export const listInvoicesLegacy = async ({ businessId, fromDate, toDate }) => {

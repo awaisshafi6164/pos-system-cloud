@@ -574,7 +574,7 @@ const reqStart = new Date(`${checkInDate}T${timeIn || "00:00"}:00+05:00`); // PK
 | 10 | 🟠 High | Auth | Auth loading race — infinite spinner on fresh browser session | ✅ Fixed — `setLoading(false)` always called |
 | 11 | 🟡 Medium | Data Integrity | `getNextUsin` race condition — duplicate invoice numbers under concurrent saves | ✅ Fixed — `get_and_increment_usin` atomic RPC |
 | 12 | 🟡 Medium | Performance | `listInvoicesLegacy` fetches up to 5000 full rows — no pagination | ✅ Fixed — date range required, limit reduced to 2000 |
-| 13 | 🟡 Medium | Performance | `getTotalSalesLegacy` sums rows in JavaScript instead of SQL | ✅ Fixed — uses `total_bill_amount.sum()` PostgREST aggregate |
+| 13 | 🟡 Medium | Performance | `getTotalSalesLegacy` sums rows in JavaScript instead of SQL | ⚠️ Reverted — PostgREST aggregate syntax (`PGRST123`) not supported on this plan. JS sum retained, only `total_bill_amount` column fetched (no unused columns) |
 | 14 | 🟡 Medium | Security | Logo stored as base64 in settings table — XSS risk + bloat | ✅ Fixed — uploads to Supabase Storage `logos` bucket, stores URL |
 | 15 | 🟡 Medium | Logic | `bookedRoomsApi` room detection via `ilike "%room%"` — false matches | ✅ Fixed — looks up Room category from menu table |
 | 16 | 🟡 Medium | API | `employeesApi` retries on `403` — wrong, only `401` should retry | ✅ Fixed — retry on `401` only |
