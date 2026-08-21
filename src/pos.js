@@ -20,7 +20,7 @@ import { getCategoriesFromMenuItems, listMenuItems } from "./api/menuItemsApi";
 import { lookupInvoiceLegacy, saveInvoiceLegacy, getTotalSalesLegacy } from "./api/invoicesApi";
 import { applyMenuStockUpdates } from "./api/stockApi";
 import { getBookedRoomsForDate } from "./api/bookedRoomsApi";
-import { getNextUsin, incrementUsin } from "./api/invoiceNumberApi";
+import { getNextUsin, getAndIncrementUsin } from "./api/invoiceNumberApi";
 import { supabase } from "./supabaseClient";
 import { getMenuCache, setMenuCache } from "./utils/menuCache";
 
@@ -69,6 +69,8 @@ const POS = ({ isHotelLayout = false }) => {
   const [loadedPRAInvoiceNumber, setLoadedPRAInvoiceNumber] = useState(null);
   const [searchText, setSearchText] = useState("");
   const [isCreditInvoice, setIsCreditInvoice] = useState(false);
+  // Incrementing this triggers fetchNextUSIN on every reset, even when isCreditInvoice stays false
+  const [resetCount, setResetCount] = useState(0);
   const [originalInvoiceItems, setOriginalInvoiceItems] = useState([]); // Track original quantities for credit invoices
   const [bookedRoomCodes, setBookedRoomCodes] = useState([]);
   const isInvoiceLoading = useRef(false);
@@ -423,7 +425,6 @@ const POS = ({ isHotelLayout = false }) => {
     }
 
     if (authLoading) return;
-    fetchNextUSIN();
     fetchMenu();
 
     const loadSettings = async () => {
@@ -488,7 +489,15 @@ const POS = ({ isHotelLayout = false }) => {
 
     loadSettings();
 
-  }, [authLoading, employee?.business_id, fetchMenu, fetchNextUSIN, isHotelLayout]);
+  }, [authLoading, employee?.business_id, fetchMenu, isHotelLayout]);
+
+  // Fetch the next invoice number on mount and after every reset.
+  // resetCount is incremented by handleReset, guaranteeing a fresh fetch
+  // even when isCreditInvoice doesn't change (e.g. user was already in new mode).
+  useEffect(() => {
+    fetchNextUSIN();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetCount, fetchNextUSIN]);
 
   useEffect(() => {
     const roomLineCount = selectedMenuItems.filter(item => item.itemName.toLowerCase().includes('room')).length;
@@ -624,6 +633,7 @@ const POS = ({ isHotelLayout = false }) => {
     if (newInvoiceRadio) newInvoiceRadio.checked = true;
     if (creditInvoiceRadio) creditInvoiceRadio.checked = false;
     setIsCreditInvoice(false);
+    setResetCount(c => c + 1); // triggers fetchNextUSIN via useEffect
     setIsSaving(false); // 🔓 Re-enable after reset
     setIsSaved(false); // 🔓 New invoice, not saved yet
     setIsPrintReady(false);
@@ -631,7 +641,11 @@ const POS = ({ isHotelLayout = false }) => {
     setIsCreditRecordLoaded(false);
     setLoadedPRAInvoiceNumber(null);
 
-    fetchNextUSIN();
+    // ⚠️ Do NOT call fetchNextUSIN() here directly.
+    // setIsCreditInvoice(false) is async — the state hasn't updated yet at this point,
+    // so fetchNextUSIN would still see isCreditInvoice===true and bail out early,
+    // leaving the invoice number blank. The useEffect below handles this correctly.
+
     fetchMenu(); // Refresh menu to show updated stock
 
     setSelectedRows([]);
@@ -676,7 +690,12 @@ const POS = ({ isHotelLayout = false }) => {
     setIsSaving(true); // 🔒 Disable button initially
 
     try {
-      const settings = await settingsManager.fetchSettings();
+      // ⚡ Fetch settings and the auth session in parallel — neither depends on the other
+      const [settings, { data: sessionData }] = await Promise.all([
+        settingsManager.fetchSettings(),
+        supabase.auth.getSession(),
+      ]);
+
       if (!settings) {
         document.getElementById("api-message").textContent =
           "❌ Error: Failed to load settings.";
@@ -725,10 +744,23 @@ const POS = ({ isHotelLayout = false }) => {
         ? (baseAddress ? `${baseAddress} | ${hotelInfo.join(" | ")}` : hotelInfo.join(" | "))
         : baseAddress;
 
+      // ⚡ For new invoices: atomically claim + increment the counter in one DB round-trip.
+      // This guarantees no two cashiers ever get the same USIN, even under concurrent saves.
+      // Credit updates keep the existing invoice number already in the input field.
+      let usin;
+      if (!isCreditUpdate) {
+        usin = await getAndIncrementUsin();
+        // Write the claimed number back to the DOM so it's visible to the user
+        const invoiceInput = document.getElementById("invoice-number");
+        if (invoiceInput) invoiceInput.value = usin;
+      } else {
+        usin = document.getElementById("invoice-number").value;
+      }
+
       const payload = {
         InvoiceNumber: "",
         POSID: parseInt(pra_posid),
-        USIN: document.getElementById("invoice-number").value,
+        USIN: usin,
         RefUSIN: null,
         DateTime: currentDateTime.replace("T", " ") + ":00",
         BuyerName: document.getElementById("customer-name").value || "Walk-in Customer",
@@ -777,8 +809,7 @@ const POS = ({ isHotelLayout = false }) => {
       // Hotel layout: SAVE only stores to DB, PRA submission is done via SUBMIT button
       // Restaurant layout: SAVE sends to PRA for new invoices
       if (pra_linked === "1" && !isHotelLayout) {
-        // Get auth token + business ID to call our Vercel serverless proxy
-        const { data: sessionData } = await supabase.auth.getSession();
+        // ⚡ accessToken already fetched in parallel at the top of handleSave
         const accessToken = sessionData?.session?.access_token;
         if (!accessToken) {
           document.getElementById("api-message").textContent = "❌ Error: Not authenticated. Please log in again.";
@@ -850,12 +881,12 @@ const POS = ({ isHotelLayout = false }) => {
         setIsSaved(true);
         setIsPrintReady(true); // ✅ Enable PRINT after successful save
 
-        // ✅ Increment invoice counter for new invoices (not credit updates)
-        if (!isCreditUpdate) {
-          await incrementUsin();
-        }
+        // ⚡ Build the post-save tasks and run them in parallel —
+        //    stock updates are independent of everything else.
+        //    Note: counter was already incremented atomically before the save via getAndIncrementUsin().
 
-        // ✅ Smart stock quantity updates
+        // Calculate stock diff (synchronous) then fire the update
+        let stockTask = Promise.resolve();
         if (showMenuStockQty) {
           let stockUpdateItems = [];
 
@@ -913,15 +944,16 @@ const POS = ({ isHotelLayout = false }) => {
             }));
           }
 
-	          if (stockUpdateItems.length > 0) {
-	            console.log("📦 Stock update payload:", stockUpdateItems);
+          if (stockUpdateItems.length > 0) {
+            console.log("📦 Stock update payload:", stockUpdateItems);
+            stockTask = applyMenuStockUpdates(stockUpdateItems);
+          } else {
+            console.log("📦 No stock changes needed");
+          }
+        }
 
-	            // 👈 Call with just the items array (not wrapped in an object)
-	            await applyMenuStockUpdates(stockUpdateItems);
-	          } else {
-	            console.log("📦 No stock changes needed");
-	          }
-	        }
+        // ⚡ Wait for stock update to finish
+        await Promise.all([stockTask]);
 
       } else {
         document.getElementById("api-message").textContent =
@@ -941,7 +973,12 @@ const POS = ({ isHotelLayout = false }) => {
     setIsPublishing(true);
 
     try {
-      const settings = await settingsManager.fetchSettings();
+      // ⚡ Fetch settings and auth session in parallel — neither depends on the other
+      const [settings, { data: sessionData }] = await Promise.all([
+        settingsManager.fetchSettings(),
+        supabase.auth.getSession(),
+      ]);
+
       if (!settings) {
         document.getElementById("api-message").textContent = "❌ Error: Failed to load settings.";
         setIsPublishing(false);
@@ -1029,8 +1066,7 @@ const POS = ({ isHotelLayout = false }) => {
         })
       };
 
-      // Get auth token
-      const { data: sessionData } = await supabase.auth.getSession();
+      // ⚡ accessToken already fetched in parallel at the top of handlePublishToPRA
       const accessToken = sessionData?.session?.access_token;
       if (!accessToken) {
         document.getElementById("api-message").textContent = "❌ Error: Not authenticated.";

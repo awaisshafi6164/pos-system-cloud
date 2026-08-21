@@ -3,8 +3,7 @@ import employeeManager from "../utils/EmployeeManager";
 
 /**
  * Reads the current next invoice number WITHOUT incrementing.
- * Called on page load to pre-fill the invoice number field.
- * The actual increment happens in incrementUsin() after a successful save.
+ * Used on page load and after reset to pre-fill the invoice number field.
  */
 export const getNextUsin = async () => {
   const businessId = employeeManager.getField("business_id");
@@ -39,8 +38,34 @@ export const getNextUsin = async () => {
 };
 
 /**
- * Atomically increments the counter after a successful save.
- * Uses a Postgres RPC to avoid race conditions between concurrent cashiers.
+ * Atomically claims the next invoice number AND increments the counter
+ * in a single SQL transaction — no race condition possible.
+ *
+ * Uses the `get_and_increment_usin` Postgres RPC which does:
+ *   UPDATE invoice_counters SET next_number = next_number + 1
+ *   RETURNING next_number - 1  (the number that was just consumed)
+ *
+ * Returns the formatted USIN string (e.g. "LR-0007").
+ * Throws if the counter row doesn't exist for this business.
+ */
+export const getAndIncrementUsin = async () => {
+  const businessId = employeeManager.getField("business_id");
+  if (!businessId) throw new Error("Missing business_id");
+
+  const { data, error } = await supabase.rpc("get_and_increment_usin", {
+    p_business_id: businessId,
+  });
+
+  if (error) throw new Error(`Failed to get invoice number: ${error.message}`);
+  if (!data) throw new Error("Invoice counter returned empty result");
+
+  return data; // already formatted by the RPC, e.g. "LR-0007"
+};
+
+/**
+ * @deprecated Use getAndIncrementUsin() instead.
+ * Kept only so any remaining call sites don't break at runtime.
+ * Will be removed once all usages are migrated.
  */
 export const incrementUsin = async () => {
   const businessId = employeeManager.getField("business_id");
