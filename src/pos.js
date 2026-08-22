@@ -20,7 +20,7 @@ import { getCategoriesFromMenuItems, listMenuItems } from "./api/menuItemsApi";
 import { lookupInvoiceLegacy, saveInvoiceLegacy, getTotalSalesLegacy } from "./api/invoicesApi";
 import { applyMenuStockUpdates } from "./api/stockApi";
 import { getBookedRoomsForDate } from "./api/bookedRoomsApi";
-import { getNextUsin, getAndIncrementUsin } from "./api/invoiceNumberApi";
+import { getNextUsin } from "./api/invoiceNumberApi";
 import { supabase } from "./supabaseClient";
 import { getMenuCache, setMenuCache } from "./utils/menuCache";
 
@@ -744,18 +744,10 @@ const POS = ({ isHotelLayout = false }) => {
         ? (baseAddress ? `${baseAddress} | ${hotelInfo.join(" | ")}` : hotelInfo.join(" | "))
         : baseAddress;
 
-      // ⚡ For new invoices: atomically claim + increment the counter in one DB round-trip.
-      // This guarantees no two cashiers ever get the same USIN, even under concurrent saves.
-      // Credit updates keep the existing invoice number already in the input field.
-      let usin;
-      if (!isCreditUpdate) {
-        usin = await getAndIncrementUsin();
-        // Write the claimed number back to the DOM so it's visible to the user
-        const invoiceInput = document.getElementById("invoice-number");
-        if (invoiceInput) invoiceInput.value = usin;
-      } else {
-        usin = document.getElementById("invoice-number").value;
-      }
+      // Read the USIN from the input — it was pre-filled by fetchNextUSIN on load/reset.
+      // The counter is only incremented AFTER a confirmed successful save (see below).
+      // This ensures a failed save never consumes an invoice number.
+      const usin = document.getElementById("invoice-number").value;
 
       const payload = {
         InvoiceNumber: "",
@@ -882,8 +874,8 @@ const POS = ({ isHotelLayout = false }) => {
         setIsPrintReady(true); // ✅ Enable PRINT after successful save
 
         // ⚡ Build the post-save tasks and run them in parallel —
-        //    stock updates are independent of everything else.
-        //    Note: counter was already incremented atomically before the save via getAndIncrementUsin().
+        //    increment the counter (new invoices only) and stock updates are independent.
+        //    Counter increments ONLY here — after confirmed save — so a failed save never wastes a number.
 
         // Calculate stock diff (synchronous) then fire the update
         let stockTask = Promise.resolve();
@@ -952,7 +944,7 @@ const POS = ({ isHotelLayout = false }) => {
           }
         }
 
-        // ⚡ Wait for stock update to finish
+        // ⚡ Run stock update after confirmed save
         await Promise.all([stockTask]);
 
       } else {
