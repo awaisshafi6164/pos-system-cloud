@@ -1,71 +1,55 @@
 import { supabase } from "../supabaseClient";
 import employeeManager from "../utils/EmployeeManager";
+import settingsManager from "../utils/SettingsManager";
 
 /**
- * Derives the next invoice number from the actual invoices table.
+ * Returns the next invoice number for this business.
  *
- * Steps:
- *   1. Read prefix + pad config from invoice_counters (plain SELECT, RLS allows employees)
- *   2. Fetch all USINs for this business, strip the prefix, find the max numeric value
- *   3. Return prefix + (max + 1) zero-padded to pad digits
+ * Logic:
+ *  1. Read invoice_prefix + invoice_pad from settings (same place all other config lives)
+ *  2. Fetch the single last saved invoice (ORDER BY id DESC LIMIT 1)
+ *  3. Strip the prefix, parse the trailing number, add 1
+ *  4. Return prefix + (last_number + 1) zero-padded to pad digits
  *
- * Running entirely in JS under the user's JWT means RLS policies work correctly —
- * no DB function context issues with auth.uid() returning NULL.
- *
- * This is always in sync with reality — a failed save, a skipped number,
- * or a manual DB edit will never cause drift. No separate counter to maintain.
+ * Examples:
+ *   Last USIN = "LR-1823"  → next = "LR-1824"
+ *   Last USIN = "STG-0027" → next = "STG-0028"
+ *   No invoices yet        → next = "LR-1" (prefix + 1)
  */
 export const getNextUsin = async () => {
   const businessId = employeeManager.getField("business_id");
   if (!businessId) throw new Error("Missing business_id");
 
-  // 1. Read prefix + pad config (auto-create row if first time)
-  let { data: config, error: configError } = await supabase
-    .from("invoice_counters")
-    .select("prefix, pad")
-    .eq("business_id", businessId)
-    .maybeSingle();
+  // 1. Read prefix + pad from settings (uses in-memory cache — no extra DB call)
+  const settings = await settingsManager.fetchSettings();
+  const prefix = settings?.invoice_prefix || "";
+  const pad    = parseInt(settings?.invoice_pad || "1", 10);
 
-  if (configError) throw new Error(configError.message);
-
-  if (!config) {
-    // First time setup — create the config row with defaults
-    const { data: newConfig, error: insertError } = await supabase
-      .from("invoice_counters")
-      .upsert(
-        { business_id: businessId, next_number: 1, prefix: "", pad: 1, updated_at: new Date().toISOString() },
-        { onConflict: "business_id", ignoreDuplicates: true }
-      )
-      .select("prefix, pad")
-      .single();
-    if (insertError) throw new Error(insertError.message);
-    config = newConfig;
-  }
-
-  const prefix = config.prefix || "";
-  const pad = config.pad || 1;
-
-  // 2. Find the highest numeric suffix among all saved USINs for this business
-  const { data: invoices, error: invoicesError } = await supabase
+  // 2. Get the last saved invoice for this business (1 row, fast)
+  const { data: lastInvoice, error: invoiceError } = await supabase
     .from("invoices")
     .select("usin")
-    .eq("business_id", businessId);
+    .eq("business_id", businessId)
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  if (invoicesError) throw new Error(invoicesError.message);
+  if (invoiceError) throw new Error(invoiceError.message);
 
-  let maxNum = 0;
-  for (const row of invoices || []) {
-    const usin = row.usin || "";
-    // Strip the prefix then parse the leading digits
-    const stripped = prefix ? usin.slice(prefix.length) : usin;
+  // 3. Parse the number out of the last USIN
+  let lastNumber = 0;
+  if (lastInvoice?.usin) {
+    const stripped = lastInvoice.usin.startsWith(prefix)
+      ? lastInvoice.usin.slice(prefix.length)
+      : lastInvoice.usin;
+
     const match = stripped.match(/^(\d+)/);
     if (match) {
-      const num = parseInt(match[1], 10);
-      if (num > maxNum) maxNum = num;
+      lastNumber = parseInt(match[1], 10);
     }
   }
 
-  // 3. Format next number
-  const next = maxNum + 1;
+  // 4. Build next USIN
+  const next = lastNumber + 1;
   return `${prefix}${String(next).padStart(pad, "0")}`;
 };

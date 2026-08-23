@@ -43,3 +43,17 @@
     border-radius: 4px;
     cursor: pointer;
 }
+
+/* Header action icons (refresh, fullscreen) */
+.header-icon {
+  cursor: pointer;
+  margin-right: 10px;
+  color: #1976d2;
+  vertical-align: middle;
+  transition: color 0.15s, transform 0.15s;
+}
+
+.header-icon:hover {
+  color: #42a5f5;
+  transform: scale(1.15);
+}
