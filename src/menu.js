@@ -400,15 +400,18 @@ function Menu() {
               <div className="form-row">
                 <div className="form-group">
                   <label>Category</label>
-                  <select
+                  <input
+                    type="text"
+                    list="category-list"
+                    placeholder="Select or type new"
                     value={form.itemCategory}
                     onChange={(e) => setForm({ ...form, itemCategory: e.target.value })}
-                  >
-                    <option value="">Select</option>
+                  />
+                  <datalist id="category-list">
                     {categories.map((cat, i) => (
-                      <option key={i} value={cat}>{cat}</option>
+                      <option key={i} value={cat} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
                 <div className="form-group">
                   <label>Price (Rs)</label>
