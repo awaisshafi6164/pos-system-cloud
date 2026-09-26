@@ -1,209 +1,124 @@
-/* Settings Page Styles */
+/* Settings Page - Tab-based Design with Orange/Cream Theme */
+
 .settings-content {
-  background-color: #F5F7FB;
+  background-color: #FFF8F0;
   min-height: 100vh;
-  padding: 40px 64px;
-  max-width: 1120px;
+  padding: 32px 48px;
+  max-width: 900px;
   margin: 0 auto;
 }
 
 /* Page Header */
 .settings-content .settings-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
-.settings-content .header-left h1 {
-  font-size: 32px;
+.settings-content .settings-header h1 {
+  font-size: 28px;
   font-weight: 600;
-  color: #111827;
-  margin: 0 0 8px 0;
-}
-
-.settings-content .header-left p {
-  font-size: 15px;
-  color: #6B7280;
+  color: #1F2937;
   margin: 0;
 }
 
-.settings-content .header-actions {
+/* Tab Navigation */
+.settings-content .settings-tabs {
   display: flex;
-  gap: 12px;
+  gap: 0;
+  border-bottom: 2px solid #E5E7EB;
+  margin-bottom: 0;
 }
 
-/* Buttons - Scoped to settings */
-.settings-content .btn-primary {
-  background-color: #2563EB;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  height: 40px;
-  transition: background-color 0.2s;
-}
-
-.settings-content .btn-primary:hover {
-  background-color: #1D4ED8;
-}
-
-.settings-content .btn-primary:disabled {
-  opacity: 0.75;
-  cursor: not-allowed;
-}
-
-.settings-content .btn-primary.btn-saved {
-  background-color: #16a34a;
-}
-
-.settings-content .btn-primary.btn-saved:hover {
-  background-color: #15803d;
-}
-
-.settings-content .btn-spinner-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.settings-content .btn-spinner {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255,255,255,0.4);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: btn-spin 0.65s linear infinite;
-  flex-shrink: 0;
-}
-
-.settings-content .btn-check {
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-@keyframes btn-spin {
-  to { transform: rotate(360deg); }
-}
-
-.settings-content .btn-ghost {
-  background-color: transparent;
-  color: #374151;
-  border: 1px solid #D1D5DB;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  height: 40px;
-  transition: all 0.2s;
-}
-
-.settings-content .btn-ghost:hover {
-  background-color: #F9FAFB;
-  border-color: #9CA3AF;
-}
-
-.settings-content .btn-secondary {
-  background-color: #F3F4F6;
-  color: #374151;
-  border: 1px solid #D1D5DB;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.settings-content .btn-secondary:hover {
-  background-color: #E5E7EB;
-}
-
-.settings-content .btn-text {
+.settings-content .tab-btn {
   background: none;
   border: none;
-  color: #2563EB;
-  font-size: 14px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.settings-content .btn-text:hover {
-  background-color: #EFF6FF;
-}
-
-/* Cards */
-.settings-content .settings-card {
-  background: #FFFFFF;
-  border-radius: 16px;
-  border: 1px solid #E5E7EB;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
-  margin-bottom: 24px;
-  overflow: hidden;
-}
-
-.settings-content .card-header {
-  padding: 24px 28px 0 28px;
-  border-bottom: none;
-}
-
-.settings-content .card-header h2 {
-  font-size: 20px;
+  padding: 12px 24px;
+  font-size: 15px;
   font-weight: 500;
-  color: #111827;
-  margin: 0 0 8px 0;
-}
-
-.settings-content .card-header p {
-  font-size: 14px;
   color: #6B7280;
-  margin: 0 0 20px 0;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s;
 }
 
-.settings-content .card-content {
-  padding: 0 28px 28px 28px;
+.settings-content .tab-btn:hover {
+  color: #F97316;
 }
 
-/* Form Layout */
-.settings-content .form-grid {
+.settings-content .tab-btn.active {
+  color: #F97316;
+}
+
+.settings-content .tab-btn.active::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #F97316;
+}
+
+/* Settings Panel */
+.settings-content .settings-panel {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  padding: 32px;
+}
+
+/* Tab Content */
+.settings-content .tab-content {
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Form Section */
+.settings-content .form-section {
+  margin-bottom: 24px;
+}
+
+/* Form Row */
+.settings-content .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
+  margin-bottom: 20px;
 }
 
-.settings-content .form-column {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+.settings-content .form-row:last-child {
+  margin-bottom: 0;
 }
 
+/* Form Group */
 .settings-content .form-group {
   display: flex;
   flex-direction: column;
+}
+
+.settings-content .form-group.full-width {
+  grid-column: 1 / -1;
 }
 
 .settings-content .form-group label {
   font-size: 14px;
   font-weight: 500;
   color: #374151;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .settings-content .form-group input,
 .settings-content .form-group textarea,
 .settings-content .form-group select {
-  padding: 10px 12px;
+  padding: 10px 14px;
   border: 1px solid #D1D5DB;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
-  color: #111827;
+  color: #1F2937;
   background-color: #FFFFFF;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
@@ -212,11 +127,12 @@
 .settings-content .form-group textarea:focus,
 .settings-content .form-group select:focus {
   outline: none;
-  border-color: #2563EB;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  border-color: #F97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 }
 
-.settings-content .form-group input:disabled {
+.settings-content .form-group input:disabled,
+.settings-content .form-group select:disabled {
   background-color: #F9FAFB;
   color: #9CA3AF;
   cursor: not-allowed;
@@ -233,6 +149,21 @@
   margin-top: 4px;
 }
 
+/* Input with Select (Service Charges) */
+.settings-content .input-with-select {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-content .input-with-select select {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.settings-content .input-with-select input {
+  flex: 1;
+}
+
 /* Logo Upload */
 .settings-content .logo-upload {
   display: flex;
@@ -241,8 +172,8 @@
 }
 
 .settings-content .logo-preview {
-  width: 96px;
-  height: 96px;
+  width: 80px;
+  height: 80px;
   border: 1px solid #E5E7EB;
   border-radius: 8px;
   background-color: #F9FAFB;
@@ -252,6 +183,7 @@
   color: #9CA3AF;
   font-size: 14px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .settings-content .logo-preview img {
@@ -261,100 +193,37 @@
 }
 
 .settings-content .upload-controls {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-/* Legacy styles for old sections */
-.settings-content .settings-section {
-  margin-bottom: 24px;
-}
-
-.settings-content .settings-section .card {
-  background: #FFFFFF;
-  border-radius: 16px;
-  border: 1px solid #E5E7EB;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
-  padding: 24px 28px;
-}
-
-.settings-content .settings-section .card h2 {
-  font-size: 20px;
-  font-weight: 500;
-  color: #111827;
-  margin: 0 0 20px 0;
-}
-
-.settings-content .horizontal-group {
-  display: flex;
-  align-items: center;
-  margin-bottom: 16px;
-  gap: 12px;
-}
-
-.settings-content .horizontal-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-  min-width: 120px;
-}
-
-.settings-content .horizontal-group input,
-.settings-content .horizontal-group select {
-  padding: 10px 12px;
-  border: 1px solid #D1D5DB;
+.settings-content .btn-upload {
+  background-color: #FFF7ED;
+  color: #F97316;
+  border: 1px solid #FDBA74;
+  padding: 8px 16px;
   border-radius: 6px;
   font-size: 14px;
-  color: #111827;
-  background-color: #FFFFFF;
-  flex: 1;
-}
-
-.settings-content .horizontal-group input:focus,
-.settings-content .horizontal-group select:focus {
-  outline: none;
-  border-color: #2563EB;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.settings-content .Visibility-group {
-  border-top: 1px solid #E5E7EB;
-  padding-top: 20px;
-  margin-top: 20px;
-}
-
-.settings-content .Visibility-group > label {
-  font-size: 14px;
-  font-weight: 800;
-  color: #111827;
-  margin-bottom: 16px;
-  display: block;
-}
-
-.settings-content .Visibility-group label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: #374151;
+  font-weight: 500;
   cursor: pointer;
-  min-width: auto;
+  transition: all 0.2s;
 }
 
-.settings-content .Visibility-group input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  margin: 0;
+.settings-content .btn-upload:hover {
+  background-color: #FFEDD5;
 }
 
-/* Radio Button Groups */
+/* Radio Group */
 .settings-content .radio-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.settings-content .radio-group.horizontal {
+  flex-direction: row;
+  gap: 24px;
 }
 
 .settings-content .radio-option {
@@ -371,80 +240,42 @@
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: #2563EB;
+  accent-color: #F97316;
 }
 
 .settings-content .radio-option span {
   font-weight: 400;
 }
 
-/* Input with Prefix/Suffix */
-.settings-content .input-with-suffix,
-.settings-content .input-with-prefix {
-  position: relative;
+/* Toggle Row */
+.settings-content .toggle-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-}
-
-.settings-content .input-with-suffix input,
-.settings-content .input-with-prefix input {
-  flex: 1;
-  padding-right: 40px;
-}
-
-.settings-content .input-with-prefix input {
-  padding-left: 40px;
-  padding-right: 12px;
-}
-
-.settings-content .suffix,
-.settings-content .prefix {
-  position: absolute;
-  font-size: 14px;
-  color: #6B7280;
-  pointer-events: none;
-}
-
-.settings-content .suffix {
-  right: 12px;
-}
-
-.settings-content .prefix {
-  left: 12px;
-}
-
-/* Toggle Switch */
-.settings-content .toggle-section {
-  margin-bottom: 24px;
-  padding-bottom: 24px;
+  padding: 16px 0;
+  margin-bottom: 20px;
   border-bottom: 1px solid #E5E7EB;
 }
 
-.settings-content .toggle-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.settings-content .toggle-header h3 {
+.settings-content .toggle-info h3 {
   font-size: 16px;
   font-weight: 500;
-  color: #111827;
+  color: #1F2937;
   margin: 0 0 4px 0;
 }
 
-.settings-content .toggle-header p {
+.settings-content .toggle-info p {
   font-size: 14px;
   color: #6B7280;
   margin: 0;
 }
 
+/* Toggle Switch */
 .settings-content .toggle-switch {
   position: relative;
   display: inline-block;
   width: 48px;
-  height: 24px;
+  height: 26px;
   flex-shrink: 0;
 }
 
@@ -463,14 +294,14 @@
   bottom: 0;
   background-color: #D1D5DB;
   transition: 0.3s;
-  border-radius: 24px;
+  border-radius: 26px;
 }
 
 .settings-content .slider:before {
   position: absolute;
   content: "";
-  height: 20px;
-  width: 20px;
+  height: 22px;
+  width: 22px;
   left: 2px;
   bottom: 2px;
   background-color: white;
@@ -480,57 +311,17 @@
 }
 
 .settings-content .toggle-switch input:checked + .slider {
-  background-color: #2563EB;
+  background-color: #F97316;
 }
 
 .settings-content .toggle-switch input:checked + .slider:before {
-  transform: translateX(24px);
-}
-
-/* Status Display */
-.settings-content .status-display {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  background-color: #F9FAFB;
-}
-
-.settings-content .status-text {
-  font-size: 14px;
-  color: #6B7280;
-  flex: 1;
-}
-
-.settings-content .status-badge {
-  font-size: 12px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 12px;
-  text-transform: uppercase;
-}
-
-.settings-content .status-badge.pending {
-  background-color: #FEF3C7;
-  color: #92400E;
-}
-
-.settings-content .status-badge.success {
-  background-color: #D1FAE5;
-  color: #065F46;
-}
-
-.settings-content .status-badge.error {
-  background-color: #FEE2E2;
-  color: #991B1B;
+  transform: translateX(22px);
 }
 
 /* Checkbox Grid */
 .settings-content .checkbox-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 
@@ -548,17 +339,44 @@
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: #2563EB;
+  accent-color: #F97316;
 }
 
 .settings-content .checkbox-option span {
   font-weight: 400;
 }
 
-@media (max-width: 768px) {
-  .settings-content .checkbox-grid {
-    grid-template-columns: 1fr;
-  }
+/* Settings Actions - Below Tab Card */
+.settings-content .settings-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 24px;
+}
+
+/* Save Button */
+.settings-content .btn-save {
+  background-color: #F97316;
+  color: white;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.settings-content .btn-save:hover {
+  background-color: #EA580C;
+}
+
+.settings-content .btn-save:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.settings-content .btn-save.btn-saved {
+  background-color: #16A34A;
 }
 
 /* Responsive Design */
@@ -567,23 +385,38 @@
     padding: 20px;
   }
   
-  .settings-content .settings-header {
-    flex-direction: column;
-    gap: 16px;
+  .settings-content .settings-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   
-  .settings-content .form-grid {
+  .settings-content .tab-btn {
+    padding: 12px 16px;
+    white-space: nowrap;
+    font-size: 14px;
+  }
+  
+  .settings-content .settings-panel {
+    padding: 20px;
+  }
+  
+  .settings-content .form-row {
     grid-template-columns: 1fr;
     gap: 16px;
   }
   
-  .settings-content .horizontal-group {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+  .settings-content .checkbox-grid {
+    grid-template-columns: 1fr 1fr;
   }
   
-  .settings-content .horizontal-group label {
-    min-width: auto;
+  .settings-content .radio-group.horizontal {
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-content .checkbox-grid {
+    grid-template-columns: 1fr;
   }
 }

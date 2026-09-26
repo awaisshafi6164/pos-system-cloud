@@ -1,39 +1,53 @@
 import React, { useState, useEffect } from "react";
-// import "./css/common.css";
+import "./css/employee.css";
 import Header from "./components/header";
 import Sidebar from "./components/sidebar";
 import { ToastContainer, toast } from "react-toastify";
-import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "./context/AuthContext";
 import { supabase } from "./supabaseClient";
 import { createEmployee, deleteEmployee, listEmployees, updateEmployee } from "./api/employeesApi";
-import {
-  Box,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  MenuItem,
-  Typography,
-  IconButton,
-  Chip,
-  InputAdornment,
-  Grid,
-  Tooltip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Skeleton,
-} from "@mui/material";
-import {
-  Edit,
-  Delete,
-  Search,
-  LockReset,
-} from "@mui/icons-material";
+
+// Icons as inline SVG components
+const PersonAddIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+  </svg>
+);
+
+const SearchIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="11" cy="11" r="8"/>
+    <path d="m21 21-4.35-4.35"/>
+  </svg>
+);
+
+const EditIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </svg>
+);
+
+const KeyIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+  </svg>
+);
+
+const DeleteIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+  </svg>
+);
+
+const UsersIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>
+);
 
 function Employees() {
   const { employee, loading: authLoading } = useAuth();
@@ -82,13 +96,13 @@ function Employees() {
     loadEmployees().catch((err) => toast.error(err?.message || "Failed to load employees"));
   }, [authLoading, employee?.business_id]);
 
-  const handleEdit = (employee) => {
+  const handleEdit = (emp) => {
     setForm({
-      name: employee.name,
-      email: employee.email,
-      role: employee.role,
+      name: emp.name,
+      email: emp.email,
+      role: emp.role,
     });
-    setEditingId(employee.id);
+    setEditingId(emp.id);
     setIsEditing(true);
   };
 
@@ -108,7 +122,6 @@ function Employees() {
       setBusy(false);
     }
   };
-
 
   const handleDelete = async (employeeId) => {
     if (window.confirm("Are you sure you want to delete this employee?")) {
@@ -153,16 +166,37 @@ function Employees() {
     return name.includes(term) || email.includes(term) || role.includes(term);
   });
 
-  const getRoleColor = (role) => {
-    switch(role) {
-      case 'admin': return 'error';
-      case 'manager': return 'primary';
-      case 'receptionist': return 'success';
-      default: return 'default';
+  // Get initials from name
+  const getInitials = (name) => {
+    if (!name) return "??";
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
     }
+    return name.substring(0, 2).toUpperCase();
   };
 
+  // Get role class for styling
+  const getRoleClass = (role) => {
+    const r = (role || "").toLowerCase();
+    if (r === "admin" || r === "administrator") return "admin";
+    if (r === "manager" || r === "software manager") return "manager";
+    if (r === "cashier") return "cashier";
+    if (r === "receptionist") return "receptionist";
+    if (r === "waiter") return "waiter";
+    return "default";
+  };
 
+  // Get display role name
+  const getDisplayRole = (role) => {
+    const r = (role || "").toLowerCase();
+    if (r === "admin" || r === "administrator") return "Admin";
+    if (r === "manager" || r === "software manager") return "Manager";
+    if (r === "cashier") return "Cashier";
+    if (r === "receptionist") return "Receptionist";
+    if (r === "waiter") return "Waiter";
+    return role || "Staff";
+  };
 
   return (
     <>
@@ -171,242 +205,174 @@ function Employees() {
         <Sidebar />
         <ToastContainer position="top-right" autoClose={3000} />
 
-        <main className="content">
-          <Box sx={{ p: 3 }}>
-            <Grid container spacing={3}>
-              {/* Left Side - Add Employee Form */}
-              <Grid item xs={12} lg={3}>
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5 }}
-                >
-                  <Card sx={{ boxShadow: 3, borderRadius: 2, height: '100%' }}>
-                    <CardContent>
-                      <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
-                        {isEditing ? 'Edit Employee' : 'Add Employee'}
-                      </Typography>
-                      
-	                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-	                        <TextField
-	                          fullWidth
-	                          label="Name"
-	                          value={form.name}
-	                          onChange={e => setForm({ ...form, name: e.target.value })}
-	                          required
-	                        />
-	                        
-	                        <TextField
-	                          fullWidth
-	                          label="Email"
-	                          type="email"
-	                          value={form.email}
-	                          onChange={e => setForm({ ...form, email: e.target.value })}
-	                          autoComplete="off"
-	                          required
-	                          disabled={isEditing}
-	                        />
-	                        
-	                        <TextField
-	                          fullWidth
-	                          select
-                          label="Employee Role"
-                          value={form.role}
-                          onChange={e => setForm({ ...form, role: e.target.value })}
-                          required
-                        >
-                          <MenuItem value="">Select Role</MenuItem>
-                          <MenuItem value="admin">Administrator</MenuItem>
-                          <MenuItem value="manager">Software Manager</MenuItem>
-                          <MenuItem value="receptionist">Receptionist</MenuItem>
-                        </TextField>
-                        
-	                        <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-	                          <Button
-	                            fullWidth
-	                            variant="contained"
-	                            onClick={isEditing ? handleUpdate : handleAdd}
-	                            sx={{ py: 1.5 }}
-	                            disabled={busy}
-	                          >
-	                            {isEditing ? 'UPDATE' : 'SAVE'}
-	                          </Button>
-	                          {isEditing && (
-                            <Button
-                              fullWidth
-                              variant="outlined"
-	                              color="error"
-	                              onClick={handleCancel}
-	                              sx={{ py: 1.5 }}
-	                              disabled={busy}
-	                            >
-	                              CANCEL
-	                            </Button>
-	                          )}
-	                        </Box>
-	                        {!isEditing ? (
-	                          <Typography variant="caption" color="text.secondary">
-	                            New emails get an invite to set a password. If the email already exists, it will be linked to this business.
-	                          </Typography>
-	                        ) : null}
-	                      </Box>
-	                    </CardContent>
-	                  </Card>
-	                </motion.div>
-	              </Grid>
+        <main className="staff-content">
+          {/* Page Header */}
+          <div className="staff-header">
+            <h1>Staff Management</h1>
+          </div>
 
-              {/* Right Side - Employees List */}
-              <Grid item xs={12} lg={9}>
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5 }}
+          {/* Main Layout */}
+          <div className="staff-layout">
+            {/* Left Panel - Add Employee Form */}
+            <div className="add-employee-card">
+              <h2 className="card-title">
+                <PersonAddIcon />
+                {isEditing ? "Edit Employee" : "Add Employee"}
+              </h2>
+
+              <div className="form-group">
+                <label>Full Name</label>
+                <input
+                  type="text"
+                  placeholder="John Doe"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  placeholder="email@larosh.pk"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  disabled={isEditing}
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Role</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
                 >
-                  <Card sx={{ boxShadow: 3, borderRadius: 2 }}>
-                    <CardContent>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Box>
-                          <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                            Employees List
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {loadingEmployees ? <Skeleton width={80} /> : `${filteredEmployees.length} Members`}
-                          </Typography>
-                        </Box>
-                      </Box>
-                      
-                      <TextField
-                        fullWidth
-                        placeholder="Search employees..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        sx={{ mb: 3 }}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <Search color="action" />
-                            </InputAdornment>
-                          ),
-                        }}
-                      />
-                      
-                      <TableContainer>
-                        <Table>
-                          <TableHead>
-                            <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                              {/* <TableCell sx={{ fontWeight: 'bold' }}>ID</TableCell> */}
-                              <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
-                              <TableCell sx={{ fontWeight: 'bold' }}>Role</TableCell>
-                              <TableCell sx={{ fontWeight: 'bold' }} align="center">Action</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {loadingEmployees ? (
-                              // Skeleton rows while loading
-                              [...Array(5)].map((_, i) => (
-                                <TableRow key={i}>
-                                  <TableCell>
-                                    <Box>
-                                      <Skeleton variant="text" width="60%" height={22} />
-                                      <Skeleton variant="text" width="80%" height={16} />
-                                    </Box>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Skeleton variant="rounded" width={72} height={24} />
-                                  </TableCell>
-                                  <TableCell align="center">
-                                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                                      <Skeleton variant="circular" width={30} height={30} />
-                                      <Skeleton variant="circular" width={30} height={30} />
-                                      <Skeleton variant="circular" width={30} height={30} />
-                                    </Box>
-                                  </TableCell>
-                                </TableRow>
-                              ))
-                            ) : (
-                              <AnimatePresence>
-                                {filteredEmployees.map((emp, index) => (
-                                  <TableRow
-                                    component={motion.tr}
-                                    key={emp.id}
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    transition={{ delay: index * 0.05 }}
-                                    sx={{ '&:hover': { bgcolor: 'action.hover' } }}
-                                  >
-                                    {/* <TableCell>#{emp.id}</TableCell> */}
-                                    <TableCell>
-                                      <Box>
-                                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                          {emp.name}
-                                        </Typography>
-                                        <Typography variant="caption" color="primary">
-                                          {emp.email}
-                                        </Typography>
-                                      </Box>
-                                    </TableCell>
-                                    <TableCell>
-                                      <Chip
-                                        label={emp.role}
-                                        color={getRoleColor(emp.role)}
-                                        size="small"
-                                      />
-                                    </TableCell>
-	                                    <TableCell align="center">
-	                                      <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-	                                        <Tooltip title="Send password reset">
-	                                          <IconButton
-	                                            size="small"
-	                                            onClick={() => handleSendResetPassword(emp.email)}
-	                                            sx={{ color: '#666' }}
-	                                            disabled={busy}
-	                                          >
-	                                            <LockReset fontSize="small" />
-	                                          </IconButton>
-	                                        </Tooltip>
-	                                        <Tooltip title="Edit">
-	                                          <IconButton
-	                                            size="small"
-	                                            onClick={() => handleEdit(emp)}
-	                                            sx={{ color: '#666' }}
-	                                            disabled={busy}
-	                                          >
-	                                            <Edit fontSize="small" />
-	                                          </IconButton>
-	                                        </Tooltip>
-	                                        <Tooltip title="Delete">
-	                                          <IconButton
-	                                            size="small"
-	                                            onClick={() => handleDelete(emp.id)}
-	                                            sx={{ color: '#666' }}
-	                                            disabled={busy}
-	                                          >
-	                                            <Delete fontSize="small" />
-	                                          </IconButton>
-	                                        </Tooltip>
-	                                      </Box>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </AnimatePresence>
-                            )}
-                          </TableBody>
-                        </Table>
-                        {!loadingEmployees && filteredEmployees.length === 0 && (
-                          <Box sx={{ p: 4, textAlign: 'center' }}>
-                            <Typography variant="body1" color="text.secondary">
-                              No employees found
-                            </Typography>
-                          </Box>
-                        )}
-                      </TableContainer>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              </Grid>
-            </Grid>
-          </Box>
+                  <option value="">Select Role</option>
+                  <option value="admin">Admin</option>
+                  <option value="manager">Manager</option>
+                  <option value="cashier">Cashier</option>
+                  <option value="receptionist">Receptionist</option>
+                  <option value="waiter">Waiter</option>
+                </select>
+              </div>
+
+              {isEditing ? (
+                <div className="form-actions-row">
+                  <button
+                    className="btn-create"
+                    onClick={handleUpdate}
+                    disabled={busy}
+                  >
+                    {busy ? "Updating…" : "Update Employee"}
+                  </button>
+                  <button
+                    className="btn-cancel"
+                    onClick={handleCancel}
+                    disabled={busy}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="btn-create"
+                  onClick={handleAdd}
+                  disabled={busy}
+                >
+                  {busy ? "Creating…" : "Create Employee"}
+                </button>
+              )}
+
+              {!isEditing && (
+                <p className="form-note">
+                  New emails get an invite to set a password. If the email already exists, it will be linked to this business.
+                </p>
+              )}
+            </div>
+
+            {/* Right Panel - Staff List */}
+            <div className="staff-list-panel">
+              {/* Search Row */}
+              <div className="search-row">
+                <div className="search-input-wrapper">
+                  <SearchIcon />
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Search staff..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <span className="member-count">
+                  {loadingEmployees ? "Loading…" : `${filteredEmployees.length} Members`}
+                </span>
+              </div>
+
+              {/* Employee Cards Grid */}
+              <div className="staff-grid">
+                {loadingEmployees ? (
+                  // Loading skeletons
+                  [...Array(4)].map((_, i) => (
+                    <div className="skeleton-card" key={i}>
+                      <div className="skeleton-avatar" />
+                      <div className="skeleton-info">
+                        <div className="skeleton-line short" />
+                        <div className="skeleton-line medium" />
+                        <div className="skeleton-badge" />
+                      </div>
+                    </div>
+                  ))
+                ) : filteredEmployees.length === 0 ? (
+                  <div className="empty-state">
+                    <UsersIcon />
+                    <p>No employees found</p>
+                  </div>
+                ) : (
+                  filteredEmployees.map((emp) => (
+                    <div className="employee-card" key={emp.id}>
+                      <div className={`employee-avatar ${getRoleClass(emp.role)}`}>
+                        {getInitials(emp.name)}
+                      </div>
+                      <div className="employee-info">
+                        <h3 className="employee-name">{emp.name}</h3>
+                        <p className="employee-email">{emp.email}</p>
+                        <span className={`role-badge ${getRoleClass(emp.role)}`}>
+                          {getDisplayRole(emp.role)}
+                        </span>
+                      </div>
+                      <div className="employee-actions">
+                        <button
+                          className="action-btn edit"
+                          onClick={() => handleEdit(emp)}
+                          disabled={busy}
+                          title="Edit"
+                        >
+                          <EditIcon />
+                        </button>
+                        <button
+                          className="action-btn key"
+                          onClick={() => handleSendResetPassword(emp.email)}
+                          disabled={busy}
+                          title="Send password reset"
+                        >
+                          <KeyIcon />
+                        </button>
+                        <button
+                          className="action-btn delete"
+                          onClick={() => handleDelete(emp.id)}
+                          disabled={busy}
+                          title="Delete"
+                        >
+                          <DeleteIcon />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </main>
       </div>
     </>

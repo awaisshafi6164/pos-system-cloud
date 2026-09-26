@@ -61,6 +61,7 @@ const POS = ({ isHotelLayout = false }) => {
   const [lastPRAInvoice, setLastPRAInvoice] = useState("");
   const [showMenuStockQty, setShowMenuStockQty] = useState(true);
   const [make_invoice_editable, setMakeInvoiceEditable] = useState(true);
+  const [emptyCheckoutDefault, setEmptyCheckoutDefault] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isPrintReady, setIsPrintReady] = useState(false); // enables PRINT — separate from save state
@@ -465,6 +466,14 @@ const POS = ({ isHotelLayout = false }) => {
           setShowCustomerName(showCustomerName);
           const showMenuStockQty = settings.show_menu_stock_qty === "1";
           setShowMenuStockQty(showMenuStockQty);
+          const emptyCheckout = settings.empty_checkout_default === "1";
+          setEmptyCheckoutDefault(emptyCheckout);
+          
+          // Apply empty checkout default setting for hotel layout
+          if (isHotelLayout && emptyCheckout) {
+            setCheckOutDate("");
+            setTimeOut("");
+          }
           setGstAmount((prevCost) => +(prevCost * (gst / 100)).toFixed(2));
           setPosCharges(parseFloat(settings.pos_charges || 0));
 
@@ -617,9 +626,15 @@ const POS = ({ isHotelLayout = false }) => {
       const currentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const currentTime = now.toTimeString().split(' ')[0].substring(0, 5);
       setCheckInDate(currentDate);
-      setCheckOutDate(currentDate);
       setTimeIn(currentTime);
-      setTimeOut(currentTime);
+      // Apply empty checkout default setting
+      if (emptyCheckoutDefault) {
+        setCheckOutDate("");
+        setTimeOut("");
+      } else {
+        setCheckOutDate(currentDate);
+        setTimeOut(currentTime);
+      }
       setEmergencyContact("");
       setNationality("Pakistan");
       await fetchBookedRooms();
@@ -1375,8 +1390,8 @@ const POS = ({ isHotelLayout = false }) => {
                     <label style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "5px", display: "block" }}>Check-Out</label>
                     <div style={{ display: "flex", gap: "10px" }}>
                       <DesktopDatePicker
-                        value={dayjs(checkOutDate, 'YYYY-MM-DD')}
-                        onChange={(newValue) => setCheckOutDate(newValue.format('YYYY-MM-DD'))}
+                        value={checkOutDate ? dayjs(checkOutDate, 'YYYY-MM-DD') : null}
+                        onChange={(newValue) => setCheckOutDate(newValue ? newValue.format('YYYY-MM-DD') : '')}
                         slotProps={{
                           textField: {
                             size: 'small',
@@ -1390,8 +1405,8 @@ const POS = ({ isHotelLayout = false }) => {
                         }}
                       />
                       <DesktopTimePicker
-                        value={dayjs(`2022-04-17T${timeOut}`)}
-                        onChange={(newValue) => setTimeOut(newValue.format('HH:mm'))}
+                        value={timeOut ? dayjs(`2022-04-17T${timeOut}`) : null}
+                        onChange={(newValue) => setTimeOut(newValue ? newValue.format('HH:mm') : '')}
                         slotProps={{
                           textField: {
                             size: 'small',
