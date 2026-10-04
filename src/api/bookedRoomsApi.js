@@ -19,6 +19,8 @@ export const getBookedRoomsForDate = async ({ businessId, checkInDate, checkOutD
 
   const reqCheckOut = checkOutDate || checkInDate;
 
+  console.log("[BookedRooms] Checking for businessId:", businessId, "checkIn:", checkInDate, "checkOut:", reqCheckOut);
+
   // Fetch invoices that overlap on the DATE range (broad filter):
   // existing.check_in_date <= requested.check_out_date AND (existing.check_out_date >= requested.check_in_date OR existing.check_out_date IS NULL)
   // Note: NULL check_out_date means guest hasn't checked out yet, so room is still booked
@@ -30,6 +32,8 @@ export const getBookedRoomsForDate = async ({ businessId, checkInDate, checkOutD
     .or(`check_out_date.gte.${checkInDate},check_out_date.is.null`);
 
   if (invoicesError) throw new Error(invoicesError.message);
+
+  console.log("[BookedRooms] Found invoices:", invoices?.length || 0);
 
   if (!invoices || invoices.length === 0) return { success: true, bookedRooms: [] };
 
@@ -54,18 +58,21 @@ export const getBookedRoomsForDate = async ({ businessId, checkInDate, checkOutD
 
   if (overlappingIds.length === 0) return { success: true, bookedRooms: [] };
 
-  // ✅ #15 — Look up room item codes from the menu table using exact category match.
-  // Previously used ilike "%room%" on item_name in invoice_items which would falsely
-  // match items like "Mushroom Soup". Now we get authoritative room codes from menu.
+  // ✅ #15 — Look up room item codes from the menu table.
+  // Use case-insensitive match that handles both "Room" and "Rooms" category names.
   const { data: roomMenuItems, error: roomMenuError } = await supabase
     .from("menu")
     .select("item_code")
     .eq("business_id", businessId)
-    .eq("item_category", "Room");
+    .ilike("item_category", "room%");
 
   if (roomMenuError) throw new Error(roomMenuError.message);
 
+  console.log("[BookedRooms] Room menu items found:", roomMenuItems?.length || 0, roomMenuItems);
+
   const roomItemCodes = new Set((roomMenuItems || []).map((m) => String(m.item_code).trim()));
+
+  console.log("[BookedRooms] Room item codes:", Array.from(roomItemCodes));
 
   // Now fetch items from overlapping invoices and filter by known room codes
   const { data: items, error: itemsError } = await supabase
@@ -80,6 +87,8 @@ export const getBookedRoomsForDate = async ({ businessId, checkInDate, checkOutD
     const code = String(it?.item_code || "").trim();
     if (code && roomItemCodes.has(code)) codes.add(code);
   });
+
+  console.log("[BookedRooms] Final booked room codes:", Array.from(codes));
 
   return { success: true, bookedRooms: Array.from(codes) };
 };

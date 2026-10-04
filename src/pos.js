@@ -573,7 +573,7 @@ const POS = ({ isHotelLayout = false }) => {
       const isRoom = item.itemName.toLowerCase().includes('room');
       return isRoom ? { ...item, quantity: days } : item;
     }));
-  }, [isHotelLayout, checkInDate, checkOutDate, timeIn, timeOut, fetchBookedRooms]);
+  }, [isHotelLayout, checkInDate, checkOutDate, timeIn, timeOut, fetchBookedRooms, resetCount]);
 
   const filteredItems = menuItems.filter(
     (item) => categoryFilter === "" || item.itemCategory === categoryFilter
@@ -637,7 +637,6 @@ const POS = ({ isHotelLayout = false }) => {
       }
       setEmergencyContact("");
       setNationality("Pakistan");
-      await fetchBookedRooms();
     }
     document.getElementById("api-message") && (document.getElementById("api-message").textContent = "🗒️ Note");
 
@@ -961,6 +960,11 @@ const POS = ({ isHotelLayout = false }) => {
 
         // ⚡ Run stock update after confirmed save
         await Promise.all([stockTask]);
+
+        // ⚡ Refresh booked rooms after save to update room availability
+        if (isHotelLayout && lock_booked_room) {
+          await fetchBookedRooms();
+        }
 
       } else {
         document.getElementById("api-message").textContent =
