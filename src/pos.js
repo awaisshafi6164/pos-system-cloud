@@ -194,10 +194,15 @@ const POS = ({ isHotelLayout = false }) => {
         return;
       }
 
+      // Check if input looks like a room number (e.g., "101", "Room 101", "room-101", "Room-101")
+      const roomPattern = /^(room[\s-]?)?(\d+)$/i;
+      const isRoomSearch = isHotelLayout && roomPattern.test(invoiceNo);
+
       const data = await lookupInvoiceLegacy({
         businessId: employee.business_id,
-        usin: invoiceNo,
+        usin: isRoomSearch ? undefined : invoiceNo,
         buyerName: search_using_name ? customerName : undefined,
+        roomNumber: isRoomSearch ? invoiceNo : undefined,
       });
 
       if (data.success && data.invoice) {

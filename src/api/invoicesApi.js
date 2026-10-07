@@ -55,12 +55,65 @@ const mapLegacyInvoiceRow = (row, itemRows) => ({
   })),
 });
 
-export const lookupInvoiceLegacy = async ({ businessId, usin, buyerName }) => {
+export const lookupInvoiceLegacy = async ({ businessId, usin, buyerName, roomNumber }) => {
   if (!businessId) throw new Error("Missing businessId");
   const u = String(usin || "").trim();
   const n = String(buyerName || "").trim();
-  if (!u && !n) throw new Error("Enter an invoice number or customer name.");
+  const r = String(roomNumber || "").trim();
+  if (!u && !n && !r) throw new Error("Enter an invoice number, customer name, or room number.");
 
+  // If searching by room number, find the last invoice that has that room
+  if (r) {
+    // Extract just the number from various formats: "Room 101", "room-101", "Room-101", "101"
+    const roomNumMatch = r.match(/(\d+)/);
+    if (!roomNumMatch) {
+      return { success: false, message: "Invalid room number format" };
+    }
+    const roomNum = roomNumMatch[1];
+    
+    // Build possible item codes/names to search for
+    // Could be "101", "031" (item_code), or item_name containing "Room 101"
+    const { data: matchingItems, error: itemsSearchError } = await supabase
+      .from("invoice_items")
+      .select("invoice_id, item_code, item_name")
+      .or(`item_code.eq.${roomNum},item_name.ilike.%room%${roomNum}%,item_name.ilike.%room ${roomNum}%`);
+    
+    if (itemsSearchError) throw new Error(itemsSearchError.message);
+    if (!matchingItems || matchingItems.length === 0) {
+      return { success: false, message: "No invoice found with that room" };
+    }
+
+    // Get the invoice IDs
+    const invoiceIds = [...new Set(matchingItems.map(item => item.invoice_id))];
+
+    // Find the most recent invoice from this business with one of those IDs
+    const { data: invoiceRow, error: invoiceError } = await supabase
+      .from("invoices")
+      .select(
+        "id, business_id, usin, pra_invoice_number, ref_usin, datetime, buyer_name, buyer_pntn, buyer_cnic, buyer_phone, address, total_sale_value, total_tax_charged, discount, further_tax, total_bill_amount, total_quantity, payment_mode, invoice_type, pos_charges, service_charges, balance, paid, check_in_date, check_out_date, time_in, time_out, emergency_contact, nationality"
+      )
+      .eq("business_id", businessId)
+      .in("id", invoiceIds)
+      .order("datetime", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (invoiceError) throw new Error(invoiceError.message);
+    if (!invoiceRow) return { success: false, message: "No invoice found for that room in this business" };
+
+    // Get items for this invoice
+    const { data: itemRows, error: itemsFetchError } = await supabase
+      .from("invoice_items")
+      .select("item_code, item_name, quantity, sale_value, tax_rate, tax_charged, total_amount")
+      .eq("invoice_id", invoiceRow.id)
+      .order("id", { ascending: true });
+
+    if (itemsFetchError) throw new Error(itemsFetchError.message);
+
+    return { success: true, invoice: mapLegacyInvoiceRow(invoiceRow, itemRows) };
+  }
+
+  // Original lookup by USIN or buyer name
   let query = supabase
     .from("invoices")
     .select(
