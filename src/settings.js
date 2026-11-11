@@ -20,6 +20,7 @@ const Settings = () => {
     phone_no: "",
     ntn_number: "",
     gst_percentage: "",
+    gst_percentage_card: "5",
     gst_included: "0",
     service_charges: "",
     service_charge_type: "rs",
@@ -286,6 +287,15 @@ const Settings = () => {
                         value={form.gst_percentage}
                         onChange={(e) => setForm({ ...form, gst_percentage: e.target.value })}
                         disabled={form.gst_included === "2"}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>GST Rate for Card / Online (%)</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 5"
+                        value={form.gst_percentage_card}
+                        onChange={(e) => setForm({ ...form, gst_percentage_card: e.target.value })}
                       />
                     </div>
                   </div>
