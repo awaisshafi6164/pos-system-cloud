@@ -23,6 +23,7 @@ import { getBookedRoomsForDate } from "./api/bookedRoomsApi";
 import { getNextUsin } from "./api/invoiceNumberApi";
 import { supabase } from "./supabaseClient";
 import { getMenuCache, setMenuCache } from "./utils/menuCache";
+import { calcInvoiceTax, getGstRate } from "./utils/tax";
 
 const POS = ({ isHotelLayout = false }) => {
   const { employee, loading: authLoading } = useAuth();
@@ -46,6 +47,9 @@ const POS = ({ isHotelLayout = false }) => {
   const [currentDateTime, setCurrentDateTime] = useState("");
   const [gstPercentage, setGstPercentage] = useState(0);
   const [gstIncluded, setGstIncluded] = useState(false);
+  const [gstPercentageCard, setGstPercentageCard] = useState(undefined); // settings.gst_percentage_card (default 5 in utils/tax)
+  const [paymentMode, setPaymentMode] = useState("cash"); // "cash" | "card"
+  const activeGstRate = getGstRate(paymentMode, gstPercentage, gstPercentageCard);
   const [showInvoiceNo, setShowInvoiceNo] = useState(true);
   const [showCnic, setShowCnic] = useState(true);
   const [room_food_both, setRoomFoodBoth] = useState(true);
@@ -300,21 +304,10 @@ const POS = ({ isHotelLayout = false }) => {
         const calculatedPaid = invoicePayable - invoiceBalance;
         setPaid(calculatedPaid);
 
-        // Set payment mode radio button
-        if (data.invoice.PaymentMode || data.invoice.payment_mode) {
-          const paymentModeMap = {
-            1: "cash",
-            2: "card",
-            5: "mixed",
-            6: "online"
-          };
-          const paymentModeValue = data.invoice.PaymentMode || data.invoice.payment_mode;
-          const paymentMode = paymentModeMap[paymentModeValue];
-          if (paymentMode) {
-            const paymentRadio = document.querySelector(`input[name="payment-mode"][value="${paymentMode}"]`);
-            if (paymentRadio) paymentRadio.checked = true;
-          }
-        }
+        // Payment mode: 2 = card; any other/legacy code (1, 5, 6, ...) loads as cash
+        setPaymentMode(
+          (data.invoice.PaymentMode || data.invoice.payment_mode) === 2 ? "card" : "cash"
+        );
 
         // Clear existing selected items and populate from invoice
         setSelectedRows([]);
@@ -441,6 +434,7 @@ const POS = ({ isHotelLayout = false }) => {
           setGstPercentage(gst); // 👈 store in state
           const gstIncluded = settings.gst_included === "1"; // 👈 convert to boolean
           setGstIncluded(gstIncluded);
+          setGstPercentageCard(settings.gst_percentage_card);
           const showInvoiceNo = settings.show_invoice_no === "1";
           setShowInvoiceNo(showInvoiceNo);
           const showCnic = settings.show_cnic === "1";
@@ -521,19 +515,11 @@ const POS = ({ isHotelLayout = false }) => {
     const count = isHotelLayout
       ? (room_food_both ? roomLineCount : roomLineCount)
       : selectedMenuItems.reduce((sum, item) => sum + item.quantity, 0);
-    const rawCost = selectedMenuItems.reduce((sum, item) => sum + (item.itemPrice * item.quantity), 0);
 
-    let netitemCost = rawCost;
-    let gst = 0;
-
-    if (gstIncluded) {
-      // GST is already in the price → extract it
-      netitemCost = +(rawCost / (1 + gstPercentage / 100)).toFixed(2);
-      gst = +(rawCost - netitemCost).toFixed(2);
-    } else {
-      // GST is not in price → add it on top
-      gst = +(rawCost * (gstPercentage / 100)).toFixed(2);
-    }
+    const { net: netitemCost, tax: gst } = calcInvoiceTax(
+      selectedMenuItems.map(item => item.itemPrice * item.quantity),
+      activeGstRate, gstIncluded
+    );
 
     const total =
       netitemCost
@@ -550,7 +536,7 @@ const POS = ({ isHotelLayout = false }) => {
     setTotalPayable(total.toFixed(2));
 
     setBalance((total - parseFloat(paid || 0)).toFixed(2));
-  }, [selectedMenuItems, posCharges, serviceCharges, discount, balance, paid, gstPercentage, gstIncluded, isHotelLayout, room_food_both]);
+  }, [selectedMenuItems, posCharges, serviceCharges, discount, balance, paid, activeGstRate, gstIncluded, isHotelLayout, room_food_both]);
 
   // New useEffect to handle Service Charges Calculation
   useEffect(() => {
@@ -652,6 +638,7 @@ const POS = ({ isHotelLayout = false }) => {
     if (newInvoiceRadio) newInvoiceRadio.checked = true;
     if (creditInvoiceRadio) creditInvoiceRadio.checked = false;
     setIsCreditInvoice(false);
+    setPaymentMode("cash");
     setResetCount(c => c + 1); // triggers fetchNextUSIN via useEffect
     setIsSaving(false); // 🔓 Re-enable after reset
     setIsSaved(false); // 🔓 New invoice, not saved yet
@@ -728,8 +715,6 @@ const POS = ({ isHotelLayout = false }) => {
         switch (mode) {
           case "cash": return 1;
           case "card": return 2;
-          case "mixed": return 5;
-          case "online": return 6;
           default: return 1;
         }
       };
@@ -742,7 +727,6 @@ const POS = ({ isHotelLayout = false }) => {
         }
       };
 
-      const paymentMode = document.querySelector('input[name="payment-mode"]:checked')?.value;
       const invoiceType = document.querySelector('input[name="invoice-type"]:checked')?.value;
       const isCreditUpdate = invoiceType === "credit";
 
@@ -768,6 +752,11 @@ const POS = ({ isHotelLayout = false }) => {
       // This ensures a failed save never consumes an invoice number.
       const usin = document.getElementById("invoice-number").value;
 
+      const itemTaxes = calcInvoiceTax(
+        selectedMenuItems.map(item => item.itemPrice * item.quantity),
+        activeGstRate, gstIncluded
+      ).items;
+
       const payload = {
         InvoiceNumber: "",
         POSID: parseInt(pra_posid),
@@ -784,28 +773,17 @@ const POS = ({ isHotelLayout = false }) => {
         FurtherTax: furtherTaxValue,
         TotalBillAmount: parseFloat(totalPayable),
         TotalQuantity: isHotelLayout ? parseInt(itemCount) + parseInt(foodCount) : parseInt(itemCount),
-        PaymentMode: paymentMode === "online" ? 1 : getPaymentCode(paymentMode),
+        PaymentMode: getPaymentCode(paymentMode),
         InvoiceType: getInvoiceTypeCode(invoiceType),
-        Items: selectedMenuItems.map(item => {
-          const rawValue = item.itemPrice * item.quantity;
-          let taxCharged = 0;
-          let totalAmount = rawValue;
-
-          if (gstIncluded) {
-            const base = +(rawValue / (1 + gstPercentage / 100)).toFixed(2);
-            taxCharged = +(rawValue - base).toFixed(2);
-            totalAmount = rawValue; // Tax already included in price
-          } else {
-            taxCharged = +(rawValue * (gstPercentage / 100)).toFixed(2);
-            totalAmount = rawValue + taxCharged; // Add tax on top
-          }
+        Items: selectedMenuItems.map((item, idx) => {
+          const { tax: taxCharged, total: totalAmount } = itemTaxes[idx];
 
           return {
             ItemCode: item.itemCode,
             ItemName: item.itemName,
             PCTCode: "01011000",
             Quantity: item.quantity,
-            TaxRate: gstPercentage,
+            TaxRate: activeGstRate,
             SaleValue: item.itemPrice * item.quantity,
             Discount: 0.0,
             FurtherTax: 0.0,
@@ -1013,8 +991,6 @@ const POS = ({ isHotelLayout = false }) => {
         switch (mode) {
           case "cash": return 1;
           case "card": return 2;
-          case "mixed": return 5;
-          case "online": return 6;
           default: return 1;
         }
       };
@@ -1027,11 +1003,15 @@ const POS = ({ isHotelLayout = false }) => {
         }
       };
 
-      const paymentMode = document.querySelector('input[name="payment-mode"]:checked')?.value;
       const invoiceType = document.querySelector('input[name="invoice-type"]:checked')?.value;
       const isCreditUpdate = invoiceType === "credit";
       const actualServiceCharges = parseFloat(document.getElementById("service-charges")?.value || 0);
       const furtherTaxValue = parseFloat(posCharges || 0) + actualServiceCharges;
+
+      const itemTaxes = calcInvoiceTax(
+        selectedMenuItems.map(item => item.itemPrice * item.quantity),
+        activeGstRate, gstIncluded
+      ).items;
 
       const payload = {
         InvoiceNumber: "",
@@ -1049,28 +1029,17 @@ const POS = ({ isHotelLayout = false }) => {
         FurtherTax: furtherTaxValue,
         TotalBillAmount: parseFloat(totalPayable),
         TotalQuantity: parseInt(itemCount) + parseInt(foodCount),
-        PaymentMode: paymentMode === "online" ? 1 : getPaymentCode(paymentMode),
+        PaymentMode: getPaymentCode(paymentMode),
         InvoiceType: getInvoiceTypeCode(invoiceType),
-        Items: selectedMenuItems.map(item => {
-          const rawValue = item.itemPrice * item.quantity;
-          let taxCharged = 0;
-          let totalAmount = rawValue;
-
-          if (gstIncluded) {
-            const base = +(rawValue / (1 + gstPercentage / 100)).toFixed(2);
-            taxCharged = +(rawValue - base).toFixed(2);
-            totalAmount = rawValue;
-          } else {
-            taxCharged = +(rawValue * (gstPercentage / 100)).toFixed(2);
-            totalAmount = rawValue + taxCharged;
-          }
+        Items: selectedMenuItems.map((item, idx) => {
+          const { tax: taxCharged, total: totalAmount } = itemTaxes[idx];
 
           return {
             ItemCode: item.itemCode,
             ItemName: item.itemName,
             PCTCode: "01011000",
             Quantity: item.quantity,
-            TaxRate: gstPercentage,
+            TaxRate: activeGstRate,
             SaleValue: item.itemPrice * item.quantity,
             Discount: 0.0,
             FurtherTax: 0.0,
@@ -1490,10 +1459,10 @@ const POS = ({ isHotelLayout = false }) => {
                   <input type="number" id="item-cost" placeholder="0" min="0" readOnly value={itemCost} />
                 </div>
 
-                {gstPercentage > 0 && (
+                {activeGstRate > 0 && (
                   <div className="horizontal-group">
                     <label htmlFor="gst">
-                      GST ({gstPercentage}%) {gstIncluded ? " (INC)" : " (EXC)"}
+                      GST ({activeGstRate}%) {gstIncluded ? " (INC)" : " (EXC)"}
                     </label>
                     <input
                       type="number"
@@ -1593,10 +1562,8 @@ const POS = ({ isHotelLayout = false }) => {
                 {/* Horizontal payment options */}
                 <div className="horizontal-group">
                   <label style={{ marginRight: '10px' }}>Method:</label>
-                  <label style={{ display: 'flex', alignItems: 'center' }}><input type="radio" name="payment-mode" value="cash" defaultChecked style={{ marginRight: '5px' }} /> Cash</label>
-                  {/* <label style={{ display: 'flex', alignItems: 'center', marginRight: '10px' }}><input type="radio" name="payment-mode" value="card" style={{ marginRight: '5px' }}/> Card</label> */}
-                  <label style={{ display: 'flex', alignItems: 'center' }}><input type="radio" name="payment-mode" value="online" style={{ marginRight: '5px' }} /> Online</label>
-                  <label style={{ display: 'flex', alignItems: 'center' }}><input type="radio" name="payment-mode" value="mixed" style={{ marginRight: '5px' }} /> Mixed</label>
+                  <label style={{ display: 'flex', alignItems: 'center' }}><input type="radio" name="payment-mode" value="cash" checked={paymentMode === "cash"} onChange={() => setPaymentMode("cash")} style={{ marginRight: '5px' }} /> Cash</label>
+                  <label style={{ display: 'flex', alignItems: 'center' }}><input type="radio" name="payment-mode" value="card" checked={paymentMode === "card"} onChange={() => setPaymentMode("card")} style={{ marginRight: '5px' }}/> Card</label>
                 </div>
 
                 <div className="horizontal-group" id="action-buttons">
