@@ -26,6 +26,7 @@ import { DesktopDatePicker } from '@mui/x-date-pickers/DesktopDatePicker';
 import dayjs from 'dayjs';
 import { ToastContainer, toast } from "react-toastify";
 import settingsManager from "./utils/SettingsManager";
+import { buildInvoiceCsv } from "./utils/invoiceCsv";
 
 const INVOICE_COLUMNS_TO_DISPLAY = [
   { key: "InvoiceNumber", header: "PRA No" },
@@ -94,8 +95,10 @@ function Invoice() {
   // Column sort for the invoices table (default: USIN/Invoice No desc)
   const [invoiceSort, setInvoiceSort] = useState({ key: "USIN", dir: "desc" });
   const [loadingInvoices, setLoadingInvoices] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
+    let cancelled = false; // ignore responses from an older date range
     const fetchInvoices = async () => {
       try {
         if (authLoading) return;
@@ -107,11 +110,13 @@ function Invoice() {
           fromDate,
           toDate,
         });
+        if (cancelled) return;
 
         if (!Array.isArray(data) || data.length === 0) {
           setFetchError("❌ No invoices found in the selected date range.");
           setInvoices([]);
           setFilteredInvoices([]);
+          setSelectedIds([]);
           return;
         }
 
@@ -123,9 +128,14 @@ function Invoice() {
         setSelectedInvoiceId(null);
         setSelectedInvoiceItems([]);
       } catch (err) {
+        if (cancelled) return;
         setFetchError("❌ Failed to fetch invoices: " + err.message);
+        // Don't keep showing/exporting rows from the previous date range
+        setInvoices([]);
+        setFilteredInvoices([]);
+        setSelectedIds([]);
       } finally {
-        setLoadingInvoices(false);
+        if (!cancelled) setLoadingInvoices(false);
       }
     };
 
@@ -145,6 +155,7 @@ function Invoice() {
       }
     };
     loadSettings();
+    return () => { cancelled = true; };
   }, [authLoading, employee?.business_id, fromDate, toDate]);
 
   const handleRowClick = (invoice) => {
@@ -560,51 +571,75 @@ function Invoice() {
                     gap: "6px"
                   }}
                   onClick={async () => {
-                    const backupData = {
-                      metadata: {
-                        exportDate: new Date().toISOString(),
-                        totalRecords: filteredInvoices.length,
-                        description: "Full invoice backup including nested items"
-                      },
-                      data: filteredInvoices
+                    if (loadingInvoices) {
+                      toast.info("Invoices are still loading for the selected dates, try again in a moment");
+                      return;
+                    }
+                    // Export ticked rows if any are selected, otherwise everything the table shows
+                    const rowsToExport = selectedIds.length > 0
+                      ? visibleInvoices.filter((inv) => selectedIds.includes(inv.id))
+                      : visibleInvoices;
+                    if (rowsToExport.length === 0) {
+                      toast.info("No invoices to export");
+                      return;
+                    }
+                    const csvContent = buildInvoiceCsv(rowsToExport);
+                    const fileName = `customer_invoices_${fromDate}_to_${toDate}.csv`;
+                    const count = rowsToExport.length;
+                    const downloadFallback = () => {
+                      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+                      const url = window.URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = fileName;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
                     };
-                    const jsonContent = JSON.stringify(backupData, null, 2);
-                    const date = new Date().toISOString().split('T')[0];
-                    const fileName = `customer_invoice_backup_${date}.json`;
                     try {
                       if (window.showSaveFilePicker) {
                         const handle = await window.showSaveFilePicker({
                           suggestedName: fileName,
                           types: [{
-                            description: 'JSON Backup File',
-                            accept: { 'application/json': ['.json'] },
+                            description: 'CSV File',
+                            accept: { 'text/csv': ['.csv'] },
                           }],
                         });
+                        // Picker closed with a path chosen: show progress while writing.
+                        setExporting(true);
                         const writable = await handle.createWritable();
-                        await writable.write(jsonContent);
+                        await writable.write(csvContent);
                         await writable.close();
-                        return;
+                        toast.success(`Exported ${count} invoice(s) to ${handle.name || fileName}`);
+                      } else {
+                        setExporting(true);
+                        downloadFallback();
+                        toast.success(`Exported ${count} invoice(s) to ${fileName}`);
                       }
-                      throw new Error("File System Access API not supported");
                     } catch (err) {
-                      if (err.name !== 'AbortError') {
-                        const blob = new Blob([jsonContent], { type: "application/json" });
-                        const url = window.URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url;
-                        a.download = fileName;
-                        a.click();
-                        window.URL.revokeObjectURL(url);
+                      if (err.name === 'AbortError') {
+                        toast.info("Export cancelled");
+                      } else {
+                        try {
+                          downloadFallback();
+                          toast.success(`Exported ${count} invoice(s) to ${fileName}`);
+                        } catch (fallbackErr) {
+                          toast.error("Export failed: " + fallbackErr.message);
+                        }
                       }
+                    } finally {
+                      setExporting(false);
                     }
                   }}
+                  disabled={exporting}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                     <polyline points="17 21 17 13 7 13 7 21"></polyline>
                     <polyline points="7 3 7 8 15 8"></polyline>
                   </svg>
-                  Export
+                  {exporting ? "Exporting..." : "Export"}
                 </button>
               </div>
             </div>
